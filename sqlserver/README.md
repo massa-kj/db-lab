@@ -1,6 +1,10 @@
 ## How to use
 
 ```sh
+brew install sqlcmd
+```
+
+```sh
 export $(grep -v '^#' .env | xargs)
 ```
 
