@@ -1,22 +1,22 @@
 #!/bin/bash
 
-set -e
+set -ue
 
 SQL_PATH="./sql/init"
 EXCLUDE_DIRS=("exclude_this_dir")
 EXCLUDE_FILES=("skip_this.sql")
+source ./util.sh
 
 # Read environment variables from .env file
 export $(grep -v '^#' .env | xargs)
-
 # Validate required environment variables
-REQUIRED_VARS=("MY_SQLSERVER_SERVERNAME" "MY_SQLSERVER_SA_USERNAME" "MY_SQLSERVER_SA_PASSWORD" "MY_SQLSERVER_DATABASE")
-for var in "${REQUIRED_VARS[@]}"; do
-  if [ -z "${!var}" ]; then
-    echo "Error: Environment variable $var is not set or is empty."
-    exit 1
-  fi
-done
+REQUIRED_VARS=(
+	"MY_SQLSERVER_SERVERNAME"
+	"MY_SQLSERVER_SA_USERNAME"
+	"MY_SQLSERVER_SA_PASSWORD"
+)
+validate_env_vars "${REQUIRED_VARS[@]}"
+
 
 # Wait until SQL Server is ready
 echo "Waiting for SQL Server to start..."
