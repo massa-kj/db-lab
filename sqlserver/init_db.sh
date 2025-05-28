@@ -38,5 +38,6 @@ sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLS
 # Execute SQL files recursively, directory-first, sorted by name
 extract_sql_files "$MY_SQLSERVER_INIT_SQL_PATH" EXCLUDE_DIRS[@] EXCLUDE_FILES[@] | while read -r sql_file; do
 	sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -d "$MY_SQLSERVER_INIT_DATABASE" -i "$sql_file"
+	echo "Executed: $sql_file"
 done
 
