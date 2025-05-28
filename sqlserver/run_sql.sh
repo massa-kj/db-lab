@@ -4,8 +4,20 @@ set -ue
 
 source ./util.sh
 
-# Read environment variables from .env file
-export $(grep -v '^#' .env | xargs)
+# Read environment variables from .env file (default: .env, can override with --env <file>)
+ENV_FILE=".env"
+NEW_ARGS=()
+while [ $# -gt 0 ]; do
+    if [ "$1" = "--env" ] && [ -n "$2" ]; then
+        ENV_FILE="$2"
+        shift 2
+    else
+        NEW_ARGS+=("$1")
+        shift
+    fi
+done
+set -- "${NEW_ARGS[@]}"
+export $(grep -v '^#' "$ENV_FILE" | xargs)
 
 # Check if at least one SQL file path is provided
 if [ $# -lt 1 ]; then
