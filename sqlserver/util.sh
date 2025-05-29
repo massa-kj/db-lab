@@ -30,6 +30,12 @@ extract_sql_files() {
 	local EXCLUDE_DIRS=("${!2}")
 	local EXCLUDE_FILES=("${!3}")
 
+	# If SQL_PATH is a file, echo its path and exit
+	if [ -f "$SQL_PATH" ] && [[ "$SQL_PATH" == *.sql ]]; then
+		echo "$SQL_PATH"
+		return
+	fi
+
 	# echo "Running SQL files in $SQL_PATH..."
 	find "$SQL_PATH" -type d | sort | while read -r dir; do
 		dir_name=$(basename "$dir")

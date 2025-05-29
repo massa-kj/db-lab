@@ -26,10 +26,6 @@ if [ $# -lt 1 ]; then
 fi
 
 for SQL_PATH in "$@"; do
-	if [ -f "$SQL_PATH" ]; then
-		sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -d "$MY_SQLSERVER_INIT_DATABASE" -i "$SQL_PATH"
-		continue
-	fi
 	# Execute SQL files recursively, directory-first, sorted by name
 	extract_sql_files "$SQL_PATH" MY_SQLSERVER_INIT_EXCLUDE_DIRS[@] MY_SQLSERVER_INIT_EXCLUDE_FILES[@] | while read -r sql_file; do
 		sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -d "$MY_SQLSERVER_INIT_DATABASE" -i "$sql_file"
