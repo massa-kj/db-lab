@@ -20,14 +20,12 @@ def ensure_venv_and_activate():
         activate_script = venv_path / "Scripts" / "python.exe" if os.name == "nt" else venv_path / "bin" / "python"
         os.execv(activate_script, [str(activate_script)] + sys.argv)
 
-
 def ensure_dotenv_installed():
     try:
         import dotenv  # noqa: F401
     except ImportError:
         print("[setup] Installing required package: python-dotenv...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "python-dotenv"])
-
 
 def collect_sql_files(paths: List[Path]) -> List[Path]:
     sql_files = []
@@ -45,11 +43,31 @@ def execute_sql_files(db_path: Path, sql_files: List[Path]):
 
     print(f"Connecting to SQLite DB: {db_path}")
     with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+
         for sql_file in sql_files:
-            print(f"Executing: {sql_file}")
-            with open(sql_file, encoding='utf-8') as f:
-                conn.executescript(f.read())
-    print("Execution complete.")
+            print(f"\n[Executing]: {sql_file}")
+            with open(sql_file, encoding="utf-8") as f:
+                sql_script = f.read()
+
+            # Split by statement
+            statements = [s.strip() for s in sql_script.split(";") if s.strip()]
+
+            for stmt in statements:
+                try:
+                    if stmt.lower().startswith("select"):
+                        print(f"\n[SQL]: {stmt}")
+                        cursor.execute(stmt)
+                        rows = cursor.fetchall()
+                        print("[Result]:")
+                        for row in rows:
+                            print(row)
+                    else:
+                        cursor.execute(stmt)
+                except Exception as e:
+                    print(f"[Error executing statement]: {stmt}\n{e}")
+        conn.commit()
+    print("\nExecution complete.")
 
 def main():
     ensure_venv_and_activate()
