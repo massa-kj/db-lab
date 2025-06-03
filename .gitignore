@@ -138,3 +138,8 @@ dist
 # python
 .venv
 
+# env file
+.env
+.env.*
+!.env.template
+
