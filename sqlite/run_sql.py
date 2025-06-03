@@ -12,11 +12,14 @@ def ensure_venv_and_activate():
     venv_path = Path(".venv")
     if not venv_path.exists():
         print("[setup] Creating virtual environment...")
+        # python3 -m venv .venv
         subprocess.check_call([sys.executable, "-m", "venv", ".venv"])
 
     # Detect if we're already running inside the venv
     if sys.prefix != str(venv_path.resolve()):
         print("[setup] Re-executing inside virtual environment...")
+        # Activate the virtual environment
+        # Instead of using `source .venv/bin/activate`
         activate_script = venv_path / "Scripts" / "python.exe" if os.name == "nt" else venv_path / "bin" / "python"
         os.execv(activate_script, [str(activate_script)] + sys.argv)
 
@@ -55,7 +58,10 @@ def execute_sql_files(db_path: Path, sql_files: List[Path]):
 
             for stmt in statements:
                 try:
-                    if stmt.lower().startswith("select"):
+                    stmt_stripped = stmt.lstrip().lower()
+                    if stmt_stripped.startswith("select") or (
+                        stmt_stripped.startswith("with") and "select" in stmt_stripped
+                    ):
                         print(f"\n[SQL]: {stmt}")
                         cursor.execute(stmt)
                         rows = cursor.fetchall()
