@@ -1,20 +1,59 @@
+# SQL Server
+
 ## How to use
 
-```sh
-brew install sqlcmd
-```
+### Using SQL Server container
 
-```sh
-export $(grep -v '^#' .env | xargs)
-```
+1. Start SQL Server container
 
-```sh
-docker compose down
-# Remove volumes
-docker compose down --volumes
-```
+    ```sh
+    docker compose up -d
+    ```
 
-```sh
-sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -d "$MY_SQLSERVER_DATABASE" -i <filepath>
-```
+1. Configure the .env file
+
+    ```sh
+    cp .env.template .env
+    vi .env
+    ```
+
+1. Run SQL files
+
+    ```sh
+    # path: sql file or directory including sql files
+    ./run.sh <path> [<path> ...] [--env <env-file>]
+    ```
+
+1. Stop SQL Server container
+
+    ```sh
+    docker compose down
+    ```
+
+    > Note: If you want to delete all the data, use `docker compose down -v`.
+
+### Using an existing SQL Server
+
+1. Configure the .env file
+
+    ```sh
+    cp .env.template .env
+    vi .env
+    ```
+
+1. Run SQL files
+
+    ```sh
+    # path: sql file or directory including sql files
+    ./run.sh <path> [<path> ...] [--env <env-file>]
+    ```
+
+## note
+
+- Install sqlcmd in local
+
+  ```sh
+  # e.g. using brew
+  brew install sqlcmd
+  ```
 

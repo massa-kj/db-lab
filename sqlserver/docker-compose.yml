@@ -8,12 +8,12 @@ services:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=${MY_SQLSERVER_SA_PASSWORD}
     volumes:
+      # Using volumes
+      - sqlserver_data:/var/opt/mssql
       # Host mount
       # - ./mssql-data/data:/var/opt/mssql/data
       # - ./mssql-data/log:/var/opt/mssql/log
       # - ./mssql-data/secrets:/var/opt/mssql/secrets
-      # Using volumes
-      - sqlserver_data:/var/opt/mssql
     restart: unless-stopped
 
 # For volumes
