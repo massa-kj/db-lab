@@ -6,8 +6,10 @@ A sandbox environment for experimenting with SQL and NoSQL databases using conta
 
 - Supports multiple databases (currently SQL Server and Oracle)
   - SQL Server (sqlcmd)
+	- Oracle (sqlcl, sqlplus)
 	- SQLite (by python)
 - Containerized environment for easy setup
 - Command-line interface for executing SQL files
 - Configurable via `.env` files
+- Sample SQL files for testing and learning
 
