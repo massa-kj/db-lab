@@ -14,12 +14,16 @@ source ./util.sh
 
 # Read environment variables from .env file (default: .env, can override with --env <file>)
 env_file=".env"
+db_name=""
 new_args=()
 
 while [ $# -gt 0 ]; do
     if [ "$1" = "--env" ] && [ -n "$2" ]; then
         env_file="$2"
         shift 2
+	elif [ "$1" = "-d" ] && [ -n "$2" ]; then
+		db_name="$2"
+		shift 2
 	elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
 		show_help
 		exit 0
@@ -40,7 +44,11 @@ fi
 for SQL_PATH in "$@"; do
 	# Execute SQL files recursively, directory-first, sorted by name
 	extract_sql_files "$SQL_PATH" MY_SQLSERVER_INIT_EXCLUDE_DIRS[@] MY_SQLSERVER_INIT_EXCLUDE_FILES[@] | while read -r sql_file; do
-		sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -d "$MY_SQLSERVER_INIT_DATABASE" -i "$sql_file"
+		if [ -z "$db_name" ]; then
+			# If no database name is specified, use the default database
+			db_name="$MY_SQLSERVER_DEFAULT_DATABASE"
+		fi
+		sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -d "$db_name" -i "$sql_file"
 		echo "Executed: $sql_file"
 	done
 done

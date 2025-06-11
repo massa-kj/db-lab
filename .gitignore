@@ -141,5 +141,6 @@ dist
 # env file
 .env
 .env.*
+!.env.container
 !.env.template
 

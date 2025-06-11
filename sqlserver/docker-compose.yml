@@ -1,4 +1,18 @@
 services:
+  mssql-client:
+    image: mcr.microsoft.com/mssql-tools
+    container_name: mssql-client
+    depends_on:
+      - sqlserver
+    working_dir: /work
+    volumes:
+      - ./sample_sql:/work/sample_sql
+      - ./run_sql.sh:/work/run_sql.sh
+      - ./util.sh:/work/util.sh
+    env_file:
+      - ./.env.container
+    entrypoint: ["tail", "-f", "/dev/null"]
+
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: sqlserver
