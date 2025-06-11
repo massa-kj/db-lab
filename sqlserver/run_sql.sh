@@ -2,27 +2,39 @@
 
 set -ue
 
+show_help() {
+	echo "Usage: $0 [--env <file>] [-d <database_name>] <sql_file_or_dir> [<sql_file_or_dir> ...]"
+	echo "Options:"
+	echo "  --env <file>         Specify the environment file (default: .env)"
+	echo "  -d <name>            Specify the database name to use"
+	echo "  -h, --help           Show this help message"
+}
+
 source ./util.sh
 
 # Read environment variables from .env file (default: .env, can override with --env <file>)
-ENV_FILE=".env"
-NEW_ARGS=()
+env_file=".env"
+new_args=()
+
 while [ $# -gt 0 ]; do
     if [ "$1" = "--env" ] && [ -n "$2" ]; then
-        ENV_FILE="$2"
+        env_file="$2"
         shift 2
+	elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+		show_help
+		exit 0
     else
-        NEW_ARGS+=("$1")
+        new_args+=("$1")
         shift
     fi
 done
-set -- "${NEW_ARGS[@]}"
-export $(grep -v '^#' "$ENV_FILE" | xargs)
+set -- "${new_args[@]}"
+export $(grep -v '^#' "$env_file" | xargs)
 
 # Check if at least one SQL file path is provided
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <sql_file_or_dir> [<sql_file_or_dir> ...]"
-    exit 1
+	show_help
+    exit 0
 fi
 
 for SQL_PATH in "$@"; do
