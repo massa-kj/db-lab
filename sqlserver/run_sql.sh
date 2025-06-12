@@ -60,6 +60,11 @@ REQUIRED_VARS=(
 )
 validate_env_vars "${REQUIRED_VARS[@]}"
 
+EXCLUDE_DIRS=($(echo "${MY_SQLSERVER_EXCLUDE_DIRS}" | tr ',' ' '))
+echo "Excluding directories: ${EXCLUDE_DIRS[*]}"
+EXCLUDE_FILES=($(echo "${MY_SQLSERVER_EXCLUDE_FILES}" | tr ',' ' '))
+echo "Excluding files: ${EXCLUDE_FILES[*]}"
+
 # Wait until SQL Server is ready
 echo "Waiting for SQL Server to start..."
 if ! command -v sqlcmd &> /dev/null; then
@@ -72,7 +77,7 @@ done
 
 for SQL_PATH in "$@"; do
 	# Execute SQL files recursively, directory-first, sorted by name
-	extract_sql_files "$SQL_PATH" MY_SQLSERVER_INIT_EXCLUDE_DIRS[@] MY_SQLSERVER_INIT_EXCLUDE_FILES[@] | while read -r sql_file; do
+	extract_sql_files "$SQL_PATH" EXCLUDE_DIRS[@] EXCLUDE_FILES[@] | while read -r sql_file; do
 		if [ -z "$db_name" ]; then
 			# If no database name is specified, use the default database
 			if [ -z "${MY_SQLSERVER_DEFAULT_DATABASE:-}" ]; then
