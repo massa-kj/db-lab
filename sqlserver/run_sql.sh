@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -ue
+set -euo pipefail
 
 show_help() {
 	echo "Usage: $0 [--env <file>] [-d <database_name>] <sql_file_or_dir> [<sql_file_or_dir> ...]"
@@ -60,20 +60,42 @@ REQUIRED_VARS=(
 )
 validate_env_vars "${REQUIRED_VARS[@]}"
 
-EXCLUDE_DIRS=($(echo "${MY_SQLSERVER_EXCLUDE_DIRS}" | tr ',' ' '))
-echo "Excluding directories: ${EXCLUDE_DIRS[*]}"
-EXCLUDE_FILES=($(echo "${MY_SQLSERVER_EXCLUDE_FILES}" | tr ',' ' '))
-echo "Excluding files: ${EXCLUDE_FILES[*]}"
+if [[ -n "${MY_SQLSERVER_EXCLUDE_DIRS:-}" ]]; then
+    IFS=',' read -ra EXCLUDE_DIRS <<< "$MY_SQLSERVER_EXCLUDE_DIRS"
+    echo "Excluding directories: ${EXCLUDE_DIRS[*]}"
+else
+    EXCLUDE_DIRS=()
+fi
+
+if [[ -n "${MY_SQLSERVER_EXCLUDE_FILES:-}" ]]; then
+    IFS=',' read -ra EXCLUDE_FILES <<< "$MY_SQLSERVER_EXCLUDE_FILES"
+    echo "Excluding files: ${EXCLUDE_FILES[*]}"
+else
+    EXCLUDE_FILES=()
+fi
 
 # Wait until SQL Server is ready
 echo "Waiting for SQL Server to start..."
 if ! command -v sqlcmd &> /dev/null; then
-	echo "Error: sqlcmd command not found. Please install the SQL Server command-line tools."
-	exit 1
+    echo "Error: sqlcmd command not found. Please install the SQL Server command-line tools."
+    exit 1
 fi
-until sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -Q "SELECT 1" &> /dev/null; do
-	sleep 1
+
+success=0
+for i in $(seq 1 10); do
+    echo "[$i/10] Checking SQL Server readiness..."
+    if sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -Q "SELECT 1" &> /dev/null; then
+        echo "SQL Server is ready."
+        success=1
+        break
+    fi
+    sleep 1
 done
+
+if [ "$success" -ne 1 ]; then
+    echo "Timeout waiting for SQL Server"
+    exit 1
+fi
 
 for SQL_PATH in "$@"; do
 	# Execute SQL files recursively, directory-first, sorted by name
