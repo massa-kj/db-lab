@@ -74,28 +74,13 @@ else
     EXCLUDE_FILES=()
 fi
 
-# Wait until SQL Server is ready
-echo "Waiting for SQL Server to start..."
 if ! command -v sqlcmd &> /dev/null; then
     echo "Error: sqlcmd command not found. Please install the SQL Server command-line tools."
     exit 1
 fi
 
-success=0
-for i in $(seq 1 10); do
-    echo "[$i/10] Checking SQL Server readiness..."
-    if sqlcmd -S "$MY_SQLSERVER_SERVERNAME" -U "$MY_SQLSERVER_SA_USERNAME" -P "$MY_SQLSERVER_SA_PASSWORD" -Q "SELECT 1" &> /dev/null; then
-        echo "SQL Server is ready."
-        success=1
-        break
-    fi
-    sleep 1
-done
-
-if [ "$success" -ne 1 ]; then
-    echo "Timeout waiting for SQL Server"
-    exit 1
-fi
+# Wait until SQL Server is ready
+wait_for_db "sqlcmd -S \"$MY_SQLSERVER_SERVERNAME\" -U \"$MY_SQLSERVER_SA_USERNAME\" -P \"$MY_SQLSERVER_SA_PASSWORD\" -Q \"SELECT 1\" &> /dev/null" || exit 1
 
 for SQL_PATH in "$@"; do
 	# Execute SQL files recursively, directory-first, sorted by name

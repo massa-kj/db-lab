@@ -70,3 +70,24 @@ validate_env_vars() {
 		fi
 	done
 }
+
+# wait_for_db runs a database readiness check command repeatedly until it succeeds or a timeout occurs.
+# Arguments:
+#   $1 - The command to check database readiness (should return 0 if ready).
+#   $2 - (Optional) Maximum number of retries (default: 10).
+# Returns:
+#   0 if the database becomes ready within the retry limit, 1 otherwise.
+wait_for_db() {
+    local check_cmd="$1"
+    local max_retries="${2:-10}"
+    for i in $(seq 1 "$max_retries"); do
+        echo "[$i/$max_retries] Waiting for DB readiness..."
+        if eval "$check_cmd"; then
+            echo "DB is ready."
+            return 0
+        fi
+        sleep 1
+    done
+    echo "Timeout waiting for DB"
+    return 1
+}
