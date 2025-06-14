@@ -9,6 +9,8 @@ services:
       - ./sample_sql:/work/sample_sql
       - ./run_sql.sh:/work/run_sql.sh
       - ./util.sh:/work/util.sh
+    environment:
+      - ENV_DISABLE_DOTENV=true
     env_file:
       - ./.env.container
     entrypoint: ["tail", "-f", "/dev/null"]

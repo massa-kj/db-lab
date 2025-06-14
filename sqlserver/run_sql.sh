@@ -12,11 +12,14 @@ show_help() {
 
 source ./util.sh
 
-# Read environment variables from .env file (default: .env, can override with --env <file>)
-env_file=".env"
 db_name=""
 new_args=()
 
+# Process command-line arguments
+if [ $# -eq 0 ]; then
+    show_help
+    exit 1
+fi
 while [ $# -gt 0 ]; do
     if [ "$1" = "--env" ] && [ -n "$2" ]; then
         env_file="$2"
@@ -40,19 +43,10 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
+# if not ENV_DISABLE_DOTENV=true, load environment variables from the specified file
+load_env_file "${env_file:-.env}"
+
 # Validate required environment variables
-if [ -f "$env_file" ]; then
-    set -a
-    while IFS='=' read -r key value; do
-        # Skip blank lines and comment lines
-        if [[ -z "$key" || "$key" =~ ^# ]]; then continue; fi
-        # If the environment variable is not already set, export it.
-        if [ -z "${!key}" ]; then
-            export "$key=$value"
-        fi
-    done < "$env_file"
-    set +a
-fi
 REQUIRED_VARS=(
 	"MY_SQLSERVER_SERVERNAME"
 	"MY_SQLSERVER_SA_USERNAME"

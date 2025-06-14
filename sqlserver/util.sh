@@ -91,3 +91,58 @@ wait_for_db() {
     echo "Timeout waiting for DB"
     return 1
 }
+
+# load_env_file loads environment variables from a specified .env file.
+# Usage: load_env_file [env_file]
+# - If ENV_DISABLE_DOTENV is set to "true", loading is skipped.
+# - If no file is specified, defaults to ".env".
+# - Ignores blank lines and lines starting with '#'.
+# - Only lines in KEY=VALUE format are processed.
+# - Keys must match shell variable naming rules.
+# - Variables already set in the environment are not overwritten.
+load_env_file() {
+    env_file="${1:-.env}"
+
+    if [ "${ENV_DISABLE_DOTENV:-}" = "true" ]; then
+        echo "Skip loading .env because ENV_DISABLE_DOTENV=true"
+        return 0
+    fi
+
+    if [ ! -f "$env_file" ]; then
+        echo ".env file not found: $env_file"
+        return 0
+    fi
+
+    echo "Loading environment variables from .env file: $env_file"
+
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Blank lines and leading # characters are skipped
+        case "$line" in
+            ''|\#*) continue ;;
+        esac
+
+        # Only simple KEY=VALUE is allowed
+        case "$line" in
+            *=*)
+                key=$(printf '%s' "$line" | awk -F= '{print $1}')
+                value=$(printf '%s' "$line" | awk -F= '{print $2}')
+                # remove leading and trailing whitespace
+                key=$(printf '%s' "$key" | awk '{$1=$1;print}')
+                value=$(printf '%s' "$value" | awk '{$1=$1;print}')
+                # validate key
+                if ! printf '%s' "$key" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*$'; then
+                    continue
+                fi
+                # Skip if already set
+                eval "is_set=\${$key+x}"
+                if [ -z "$is_set" ]; then
+                    export "$key=$value"
+                fi
+                ;;
+            *)
+                continue
+                ;;
+        esac
+    done < "$env_file"
+}
+
