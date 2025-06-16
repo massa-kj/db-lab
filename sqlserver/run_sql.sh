@@ -54,6 +54,14 @@ REQUIRED_VARS=(
 )
 validate_env_vars "${REQUIRED_VARS[@]}"
 
+if ! command -v sqlcmd &> /dev/null; then
+    echo "Error: sqlcmd command not found. Please install the SQL Server command-line tools."
+    exit 1
+fi
+
+# Wait until SQL Server is ready
+wait_for_db "sqlcmd -S \"$MY_SQLSERVER_SERVERNAME\" -U \"$MY_SQLSERVER_SA_USERNAME\" -P \"$MY_SQLSERVER_SA_PASSWORD\" -Q \"SELECT 1\" &> /dev/null" || exit 1
+
 if [[ -n "${MY_SQLSERVER_EXCLUDE_DIRS:-}" ]]; then
     IFS=',' read -ra EXCLUDE_DIRS <<< "$MY_SQLSERVER_EXCLUDE_DIRS"
     echo "Excluding directories: ${EXCLUDE_DIRS[*]}"
@@ -67,14 +75,6 @@ if [[ -n "${MY_SQLSERVER_EXCLUDE_FILES:-}" ]]; then
 else
     EXCLUDE_FILES=()
 fi
-
-if ! command -v sqlcmd &> /dev/null; then
-    echo "Error: sqlcmd command not found. Please install the SQL Server command-line tools."
-    exit 1
-fi
-
-# Wait until SQL Server is ready
-wait_for_db "sqlcmd -S \"$MY_SQLSERVER_SERVERNAME\" -U \"$MY_SQLSERVER_SA_USERNAME\" -P \"$MY_SQLSERVER_SA_PASSWORD\" -Q \"SELECT 1\" &> /dev/null" || exit 1
 
 for SQL_PATH in "$@"; do
 	# Execute SQL files recursively, directory-first, sorted by name
