@@ -26,5 +26,5 @@ volumes:
 networks:
   dblab:
     external: true
-    name: db-lab-net
+    name: "${DB_LAB_NETWORK}"
 

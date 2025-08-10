@@ -6,6 +6,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DB_DIR="$ROOT/engines"
 cd "$ROOT"
 
+if [[ -f "$ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
+fi
+
 ENGINE="${ENGINE:-}"
 if [[ -z "${ENGINE}" ]]; then
   if command -v podman >/dev/null 2>&1; then ENGINE="podman"; else ENGINE="docker"; fi
@@ -23,7 +30,7 @@ red(){ printf "\033[31m%s\033[0m\n" "$*"; }
 
 ensure_net() {
   # Docker/Podman common: Create a network with the same name if it does not exist
-  local net="db-lab-net"
+  local net="${DB_LAB_NETWORK}"
   if ! ${ENGINE} network inspect "$net" >/dev/null 2>&1; then
     ${ENGINE} network create "$net" >/dev/null
   fi
