@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:${PG_VERSION:-16}
+    container_name: db-lab-postgres
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${PGPORT:-55432}:5432"
+    environment:
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
+      POSTGRES_DB: ${PGDATABASE:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-postgres} -d ${PGDATABASE:-postgres}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    networks:
+      - dblab
+
+volumes:
+  pgdata:
+
+networks:
+  dblab:
+    external: true
+    name: db-lab-net
+

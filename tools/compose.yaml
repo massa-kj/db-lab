@@ -1,0 +1,16 @@
+services:
+  db-tools:
+    build:
+      context: .
+    container_name: db-lab-tools
+    working_dir: /work
+    volumes:
+      - .:/work
+    networks:
+      - dblab
+
+networks:
+  dblab:
+    external: true
+    name: db-lab-net
+
