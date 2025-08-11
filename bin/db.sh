@@ -128,11 +128,11 @@ main() {
   ensure_net
 
   # parse args
-  local sub db
-  sub="${1:-}"; shift || true
+  local db cmd
   db="${1:-}"; [[ -n "$db" ]] && shift || true
+  cmd="${1:-}"; [[ -n "$cmd" ]] && shift || true
 
-  if [[ -z "$sub" || "$sub" == "-h" || "$sub" == "--help" ]]; then
+  if [[ -z "$cmd" || "$cmd" == "-h" || "$cmd" == "--help" ]]; then
     usage; return 2
   fi
 
@@ -141,15 +141,15 @@ main() {
     db="${DB_ALIASES[$db]}"
   fi
 
-  case "$sub" in
+  case "$cmd" in
     up|down|logs|ps|restart)
       [[ -z "$db" ]] && { echo "db required"; usage; exit 1; }
-      "$sub" "$db"
+      "$cmd" "$db"
       ;;
     cli|seed|health|conninfo)
       [[ -z "$db" ]] && { echo "db required"; usage; exit 1; }
-      fn="${DB_FUNCS["$db:$sub"]:-}"
-      [[ -z "$fn" ]] && { echo "unimplemented: $sub $db"; exit 2; }
+      fn="${DB_FUNCS["$db:$cmd"]:-}"
+      [[ -z "$fn" ]] && { echo "unimplemented: $db" $cmd; exit 2; }
       "$fn" "$@"
       ;;
     *) usage ;;

@@ -19,13 +19,13 @@ A sandbox environment for experimenting with SQL and NoSQL databases using conta
 cp .env.example .env
 
 # Startup (network will be created automatically if it doesn't exist)
-./bin/db up pg
+./bin/db pg up
 
 # CLI (db-tools → service name)
-./bin/db cli pg     # Opens psql
+./bin/db pg cli     # Opens psql
 
 # If you want to connect from the host using a GUI/native client
-./bin/db conninfo pg
+./bin/db pg conninfo
 ```
 
 ## How to Add a New Database
