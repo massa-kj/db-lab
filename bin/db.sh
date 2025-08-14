@@ -57,19 +57,18 @@ register_cmd() {
   DB_FUNCS["$name:$sub"]="$func"
 }
 
-# load libs
-for lib in "$DB_DIR"/*/lib.sh; do
+# load each engine define.sh
+for define in "$DB_DIR"/*/define.sh; do
   # shellcheck disable=SC1090
-  source "$lib"
+  source "$define"
 done
 
-# dispatch
 usage() {
   cat <<EOF
 Usage: db.sh <command> <db> [args...]
 
 command:    up | down | logs | ps | restart | cli | seed | health | conninfo
-db:         $(printf '%s ' "${!DB_COMPOSE[@]}" | sed 's/ $//')
+db:         $(find engines -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//')
 
 DB Alias:   $(for key in "${!DB_ALIASES[@]}"; do printf '%s=%s ' "$key" "${DB_ALIASES[$key]}"; done)
 
@@ -97,42 +96,21 @@ logs()  { $COMPOSE -f "$(cf "$1")" logs -f --tail=200; }
 ps()    { $COMPOSE -f "$(cf "$1")" ps; }
 restart(){ $COMPOSE -f "$(cf "$1")" restart; }
 
-cli() {
-  ensure_net
-
-  local cmd
-  case "$1" in
-    pg|postgres)
-      cmd='PGPASSWORD="${PGPASSWORD:-postgres}" psql "postgresql://${PGUSER:-postgres}:${PGPASSWORD:-postgres}@postgres:5432/${PGDATABASE:-postgres}"'
-      ;;
-    *)
-      echo "usage: cli [pg|mysql|redis]" >&2
-      return 2
-      ;;
-  esac
-
-  $COMPOSE -f "$(cf tools)" run --rm db-tools "$cmd"
-}
-
-seed() {
-  case "$1" in
-    pg|postgres)
-      $COMPOSE -f "$(cf tools)" run --rm db-tools bash -lc \
-        'psql -h ${HOST_BIND:-127.0.0.1} -p ${PGPORT:-55432} -U ${PGUSER:-postgres} -d ${PGDATABASE:-postgres} -f init/postgres/01_schema.sql'
-      ;;
-    *) red "unknown db: $1"; exit 1 ;;
-  esac
+dispatch() {
+  local db="$1" action="$2"; shift 2
+  # ensure_engine_loaded "$db"
+  local fn="${DB_FUNCS[$db:$action]:-}"
+  [[ -n "$fn" ]] || { echo "unknown subcommand: $db $action" >&2; exit 2; }
+  "$fn" "$@"
 }
 
 main() {
   ensure_net
 
   # parse args
-  local db cmd
-  db="${1:-}"; [[ -n "$db" ]] && shift || true
-  cmd="${1:-}"; [[ -n "$cmd" ]] && shift || true
+  db="${1:-}"; ACTION="${2:-}"; shift 2 || true
 
-  if [[ -z "$cmd" || "$cmd" == "-h" || "$cmd" == "--help" ]]; then
+  if [[ -z "$ACTION" || "$ACTION" == "-h" || "$ACTION" == "--help" ]]; then
     usage; return 2
   fi
 
@@ -141,16 +119,18 @@ main() {
     db="${DB_ALIASES[$db]}"
   fi
 
-  case "$cmd" in
+  # load each engine lib.sh
+  # shellcheck source=/dev/null
+  source "engines/${db}/lib.sh"
+
+  case "$ACTION" in
     up|down|logs|ps|restart)
       [[ -z "$db" ]] && { echo "db required"; usage; exit 1; }
-      "$cmd" "$db"
+      "$ACTION" "$db"
       ;;
     cli|seed|health|conninfo)
       [[ -z "$db" ]] && { echo "db required"; usage; exit 1; }
-      fn="${DB_FUNCS["$db:$cmd"]:-}"
-      [[ -z "$fn" ]] && { echo "unimplemented: $db" $cmd; exit 2; }
-      "$fn" "$@"
+      dispatch "$db" "$ACTION" "$@"
       ;;
     *) usage ;;
   esac
