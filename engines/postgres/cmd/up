@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$DBLAB_ROOT/scripts/lib/core.sh"
+
+ensure_network
+( cd "$DBLAB_ROOT/engines/postgres"
+    PG_VER="${PG_VER:-${POSTGRES_VER_DEFAULT:-16}}" \
+    compose -f compose.yaml --profile engine up -d
+)
+

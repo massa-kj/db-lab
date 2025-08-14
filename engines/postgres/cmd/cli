@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$DBLAB_ROOT/scripts/lib/core.sh"
+
+# cli="dblab-pg-cli-${PG_VER:-${POSTGRES_VER_DEFAULT:-16}}"
+# ctr_exec -it "$cli" psql -h "${PGHOST:-dblab-pg}" -p "${PGPORT:-5432}" \
+#   -U "${PGUSER:-postgres}" -d "${PGDATABASE:-postgres}"
+( cd "$DBLAB_ROOT/engines/postgres"
+    cmd='PGPASSWORD="${PGPASSWORD:-postgres}" psql "postgresql://${PGUSER:-postgres}:${PGPASSWORD:-postgres}@postgres:5432/${PGDATABASE:-postgres}"'
+    compose -f compose.yaml --profile cli run --rm cli "$cmd"
+)
+
