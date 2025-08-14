@@ -1,13 +1,11 @@
 # Register the compose path for this DB
 register_db "postgres" "engines/postgres/compose.yaml"
-# Alias
-alias_db "pg" "postgres"
 
 # commands
 
 postgres_cli() {
   cmd='PGPASSWORD="${PGPASSWORD:-postgres}" psql "postgresql://${PGUSER:-postgres}:${PGPASSWORD:-postgres}@postgres:5432/${PGDATABASE:-postgres}"'
-  $COMPOSE -f "engines/postgres/cli/compose-cli.yaml" run --rm pg-cli "$cmd"
+  run_compose postgres --profile cli run --rm cli "$cmd"
 }
 
 postgres_health() {

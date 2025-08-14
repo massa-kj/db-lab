@@ -20,6 +20,17 @@ services:
     networks:
       - dblab
 
+  cli:
+    build:
+      context: .
+      dockerfile: cli.Dockerfile
+    container_name: ${PROJECT_NAME:-dblab-pg}-cli
+    profiles: ["cli"]
+    working_dir: /work
+    volumes:
+      - .:/work
+    networks: [dblab-net]
+
 volumes:
   pgdata:
 
