@@ -144,3 +144,4 @@ dist
 !.env.container
 !.env.template
 
+!**/cmd/logs
