@@ -9,6 +9,12 @@ source "$DBLAB_ROOT/scripts/lib/resolver.sh"
 
 load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
 
+# load each engine meta.sh
+for meta in "${DBLAB_ROOT}"/engines/*/meta.sh; do
+    # shellcheck disable=SC1090
+    source "$meta"
+done
+
 usage() {
   cat <<EOF
 Usage: db.sh <engine> <command> [args...]
@@ -63,12 +69,6 @@ export DBLAB_ENGINE DBLAB_VER DBLAB_ENVFILES
 
 # Load environment variables (overwrite in the order: default → local → specified)
 load_envs_if_exists "${DBLAB_ENVFILES[@]:-}"
-
-# load each engine meta.sh
-for meta in "${DBLAB_ROOT}"/engines/*/meta.sh; do
-    # shellcheck disable=SC1090
-    source "$meta"
-done
 
 # Command resolution (engines/<engine>/cmd/<command>)
 cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
