@@ -42,10 +42,10 @@ export DBLAB_ENGINE DBLAB_VER DBLAB_ENVFILES
 # Load environment variables (overwrite in the order: default → local → specified)
 load_envs_if_exists "${DBLAB_ENVFILES[@]:-}"
 
-# load each engine define.sh
-for define in "${DBLAB_ROOT}"/engines/*/define.sh; do
+# load each engine meta.sh
+for meta in "${DBLAB_ROOT}"/engines/*/meta.sh; do
     # shellcheck disable=SC1090
-    source "$define"
+    source "$meta"
 done
 
 if [[ -n "$db" && -n "${DB_ALIASES[$db]+_}" ]]; then

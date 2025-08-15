@@ -57,10 +57,10 @@ register_cmd() {
   DB_FUNCS["$name:$sub"]="$func"
 }
 
-# load each engine define.sh
-for define in "$DB_DIR"/*/define.sh; do
+# load each engine meta.sh
+for meta in "$DB_DIR"/*/meta.sh; do
   # shellcheck disable=SC1090
-  source "$define"
+  source "$meta"
 done
 
 usage() {
