@@ -9,6 +9,22 @@ source "$DBLAB_ROOT/scripts/lib/resolver.sh"
 
 load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
 
+usage() {
+  cat <<EOF
+Usage: db.sh <engine> <command> [args...]
+
+db:         $(find "${DBLAB_ROOT}"/engines -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//')
+command:    up | down | logs | ps | restart | cli | seed | health | conninfo
+
+DB Alias:   $(for key in "${!DB_ALIASES[@]}"; do printf '%s=%s ' "$key" "${DB_ALIASES[$key]}"; done)
+
+Examples:
+  db.sh pg up
+  db.sh mysql cli
+  db.sh redis health
+EOF
+}
+
 export DBLAB_RUNTIME="${DBLAB_RUNTIME:-docker}"
 export DBLAB_NETWORK_NAME="${DBLAB_NETWORK_NAME:-dblab-net}"
 
@@ -16,14 +32,20 @@ export DBLAB_NETWORK_NAME="${DBLAB_NETWORK_NAME:-dblab-net}"
 ensure_network "$DBLAB_NETWORK_NAME"
 
 # Parse command line arguments
-if [[ $# -lt 2 ]]; then
-    echo "Usage: db <engine> <command> [args...]"
-    echo " ex):   db postgres up --ver 16 --with engine,cli"
-    exit 1
-fi
+db="${1:-}"; DBLAB_COMMAND="${2:-}"; shift 2 || true
 
-db="$1"; shift
-DBLAB_COMMAND="$1"; shift
+if [[ -z "$db" || "$db" == "-h" || "$db" == "--help" ]]; then
+    usage; exit 1
+fi
+if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
+    # alias resolution
+    db="${DB_ALIASES[$db]}"
+fi
+DBLAB_ENGINE="${db}"
+
+if [[ -z "$DBLAB_COMMAND" ]]; then
+    usage; exit 1
+fi
 
 # Pre-read common flags (such as --ver, --env, etc. are interpreted by the core and passed to the environment)
 DBLAB_VER=""
@@ -47,12 +69,6 @@ for meta in "${DBLAB_ROOT}"/engines/*/meta.sh; do
     # shellcheck disable=SC1090
     source "$meta"
 done
-
-if [[ -n "$db" && -n "${DB_ALIASES[$db]+_}" ]]; then
-    # alias resolution
-    db="${DB_ALIASES[$db]}"
-fi
-DBLAB_ENGINE="${db}"
 
 # Command resolution (engines/<engine>/cmd/<command>)
 cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
