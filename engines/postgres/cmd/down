@@ -3,6 +3,10 @@ set -euo pipefail
 source "$DBLAB_ROOT/scripts/lib/core.sh"
 
 ( cd "$DBLAB_ROOT/engines/postgres"
-    compose -f compose.yaml --profile engine --profile cli down -v
+    if [[ "${DBLAB_FORCE_REMOVE_VOLUMES:-}" == "true" ]]; then
+        compose -f compose.yaml --profile engine --profile cli down -v
+    else
+        compose -f compose.yaml --profile engine --profile cli down
+    fi
 )
 
