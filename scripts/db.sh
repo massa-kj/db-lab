@@ -5,6 +5,8 @@ DBLAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export DBLAB_ROOT
 
 source "$DBLAB_ROOT/scripts/lib/core.sh"
+source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+source "$DBLAB_ROOT/scripts/lib/registry.sh"
 source "$DBLAB_ROOT/scripts/lib/resolver.sh"
 
 load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"

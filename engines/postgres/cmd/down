@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$DBLAB_ROOT/scripts/lib/core.sh"
+source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
 
 ( cd "$DBLAB_ROOT/engines/postgres"
     if [[ "${DBLAB_FORCE_REMOVE_VOLUMES:-}" == "true" ]]; then

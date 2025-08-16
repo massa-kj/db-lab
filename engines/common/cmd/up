@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # source "$(dirname "$0")/../lib.sh"
-source "$DBLAB_ROOT/scripts/lib/core.sh"
+source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
 
 ( cd "${DBLAB_ROOT}/engines/${DBLAB_ENGINE}"
     compose up -d
