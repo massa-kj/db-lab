@@ -5,11 +5,19 @@ DBLAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export DBLAB_ROOT
 
 source "$DBLAB_ROOT/scripts/lib/core.sh"
-source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
 source "$DBLAB_ROOT/scripts/lib/registry.sh"
 source "$DBLAB_ROOT/scripts/lib/resolver.sh"
 
+# Load default common environment variables
 load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
+
+export DBLAB_RUNTIME="${DBLAB_RUNTIME:-docker}"
+export DBLAB_NETWORK_NAME="${DBLAB_NETWORK_NAME:-dblab-net}"
+
+source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+
+# Ensure the runtime network exists
+ensure_network "$DBLAB_NETWORK_NAME"
 
 # load each engine meta.sh
 for meta in "${DBLAB_ROOT}"/engines/*/meta.sh; do
@@ -32,12 +40,6 @@ Examples:
   db.sh redis health
 EOF
 }
-
-export DBLAB_RUNTIME="${DBLAB_RUNTIME:-docker}"
-export DBLAB_NETWORK_NAME="${DBLAB_NETWORK_NAME:-dblab-net}"
-
-# Ensure the runtime network exists
-ensure_network "$DBLAB_NETWORK_NAME"
 
 # Parse command line arguments
 db="${1:-}"; DBLAB_COMMAND="${2:-}"; shift 2 || true
