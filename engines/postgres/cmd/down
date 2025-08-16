@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+source "$LIBRARY_ROOT/engine-lib.sh"
 
-( cd "$DBLAB_ROOT/engines/postgres"
+( cd "$ENGINE_ROOT/postgres"
     if [[ "${DBLAB_FORCE_REMOVE_VOLUMES:-}" == "true" ]]; then
         compose -f compose.yaml --profile engine --profile cli down -v
     else

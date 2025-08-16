@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+source "${LIBRARY_ROOT}/engine-lib.sh"
 
 ensure_network
-( cd "$DBLAB_ROOT/engines/postgres"
+( cd "${ENGINE_ROOT}/postgres"
     PG_VER="${PG_VER:-${POSTGRES_VER_DEFAULT:-16}}" \
     compose -f compose.yaml --profile engine up -d
 )

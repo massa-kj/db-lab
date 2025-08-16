@@ -2,11 +2,15 @@
 set -euo pipefail
 
 DBLAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LIBRARY_ROOT="$DBLAB_ROOT/scripts/lib"
+ENGINE_ROOT="$DBLAB_ROOT/engines"
 export DBLAB_ROOT
+export LIBRARY_ROOT
+export ENGINE_ROOT
 
-source "$DBLAB_ROOT/scripts/lib/core.sh"
-source "$DBLAB_ROOT/scripts/lib/registry.sh"
-source "$DBLAB_ROOT/scripts/lib/resolver.sh"
+source "$LIBRARY_ROOT/core.sh"
+source "$LIBRARY_ROOT/registry.sh"
+source "$LIBRARY_ROOT/resolver.sh"
 
 # Load default common environment variables
 load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
@@ -14,13 +18,13 @@ load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
 export DBLAB_RUNTIME="${DBLAB_RUNTIME:-docker}"
 export DBLAB_NETWORK_NAME="${DBLAB_NETWORK_NAME:-dblab-net}"
 
-source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+source "$LIBRARY_ROOT/engine-lib.sh"
 
 # Ensure the runtime network exists
 ensure_network "$DBLAB_NETWORK_NAME"
 
 # load each engine meta.sh
-for meta in "${DBLAB_ROOT}"/engines/*/meta.sh; do
+for meta in "${ENGINE_ROOT}"/*/meta.sh; do
     # shellcheck disable=SC1090
     source "$meta"
 done
@@ -29,7 +33,7 @@ usage() {
   cat <<EOF
 Usage: db.sh <engine> <command> [args...]
 
-db:         $(find "${DBLAB_ROOT}"/engines -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//')
+db:         $(find "${ENGINE_ROOT}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//')
 command:    up | down | logs | ps | restart | cli | seed | health | conninfo
 
 DB Alias:   $(for key in "${!DB_ALIASES[@]}"; do printf '%s=%s ' "$key" "${DB_ALIASES[$key]}"; done)
@@ -79,7 +83,7 @@ cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
 || die "unknown command: $DBLAB_ENGINE $DBLAB_COMMAND"
 
 # Load the engine's manifest to inject defaults/capabilities
-manifest_path="$DBLAB_ROOT/engines/$DBLAB_ENGINE/manifest.sh"
+manifest_path="${ENGINE_ROOT}/${DBLAB_ENGINE}/manifest.sh"
 [[ -f "$manifest_path" ]] && source "$manifest_path"
 
 # Execute the command

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+source "${LIBRARY_ROOT}/engine-lib.sh"
 
-( cd "$DBLAB_ROOT/engines/postgres"
+( cd "${ENGINE_ROOT}/postgres"
     compose -f compose.yaml --profile engine run --rm --no-deps postgres \
 		pg_isready -h ${HOST_BIND:-postgres} -p ${PGPORT:-5432} -U "${PGUSER:-postgres}" -d "${PGDATABASE:-postgres}"
 

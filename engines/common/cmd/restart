@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # source "$(dirname "$0")/../lib.sh"
-source "$DBLAB_ROOT/scripts/lib/engine-lib.sh"
+source "$LIBRARY_ROOT/engine-lib.sh"
 
-( cd "${DBLAB_ROOT}/engines/${DBLAB_ENGINE}"
+( cd "${ENGINE_ROOT}/${DBLAB_ENGINE}"
     svc="${1:-}"
     if [[ -n "$svc" ]]; then
         compose -f compose.yaml restart "$svc"
