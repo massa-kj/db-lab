@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$DBLAB_ROOT/scripts/lib/core.sh"
+
+echo "postgresql://${PGUSER:-postgres}:${PGPASSWORD:-postgres}@${HOST_BIND:-127.0.0.1}:${PGPORT:-55432}/${PGDATABASE:-postgres}"
+
