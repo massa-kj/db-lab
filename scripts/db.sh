@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+######################
+# Common Preparation #
+######################
 DBLAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBRARY_ROOT="$DBLAB_ROOT/scripts/lib"
 ENGINE_ROOT="$DBLAB_ROOT/engines"
@@ -45,6 +48,9 @@ Examples:
 EOF
 }
 
+#######################
+# Command Preparation #
+#######################
 # Parse command line arguments
 db="${1:-}"; DBLAB_COMMAND="${2:-}"; shift 2 || true
 
@@ -56,6 +62,9 @@ if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
     db="${DB_ALIASES[$db]}"
 fi
 DBLAB_ENGINE="${db}"
+
+# Load environment variables for specific engine
+load_envs_if_exists "${ENGINE_ROOT}/${DBLAB_ENGINE}/default.env"
 
 if [[ -z "$DBLAB_COMMAND" ]]; then
     usage; exit 1
@@ -75,7 +84,7 @@ while [[ $# -gt 0 ]]; do
 done
 export DBLAB_ENGINE DBLAB_VER DBLAB_ENVFILES
 
-# Load environment variables (overwrite in the order: default → local → specified)
+# Load environment variables for specific file
 load_envs_if_exists "${DBLAB_ENVFILES[@]:-}"
 
 # Command resolution (engines/<engine>/cmd/<command>)
