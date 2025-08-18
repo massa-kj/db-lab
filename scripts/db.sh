@@ -7,9 +7,7 @@ set -euo pipefail
 DBLAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LIBRARY_ROOT="$DBLAB_ROOT/scripts/lib"
 ENGINE_ROOT="$DBLAB_ROOT/engines"
-export DBLAB_ROOT
-export LIBRARY_ROOT
-export ENGINE_ROOT
+export DBLAB_ROOT LIBRARY_ROOT ENGINE_ROOT
 
 source "$LIBRARY_ROOT/core.sh"
 source "$LIBRARY_ROOT/registry.sh"
@@ -18,35 +16,17 @@ source "$LIBRARY_ROOT/resolver.sh"
 # Load default common environment variables
 load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
 
-export DBLAB_RUNTIME="${DBLAB_RUNTIME:-docker}"
-export DBLAB_NETWORK_NAME="${DBLAB_NETWORK_NAME:-dblab-net}"
-
-source "$LIBRARY_ROOT/engine-lib.sh"
-
-# Ensure the runtime network exists
-ensure_network "$DBLAB_NETWORK_NAME"
-
 # load each engine meta.sh
 for meta in "${ENGINE_ROOT}"/*/meta.sh; do
     # shellcheck disable=SC1090
     source "$meta"
 done
 
-usage() {
-  cat <<EOF
-Usage: db.sh <engine> <command> [args...]
+source "$LIBRARY_ROOT/help.sh"
+source "$LIBRARY_ROOT/engine-lib.sh"
 
-db:         $(find "${ENGINE_ROOT}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tr '\n' ' ' | sed 's/ $//')
-command:    up | down | logs | ps | restart | cli | seed | health | conninfo
-
-DB Alias:   $(for key in "${!DB_ALIASES[@]}"; do printf '%s=%s ' "$key" "${DB_ALIASES[$key]}"; done)
-
-Examples:
-  db.sh pg up
-  db.sh mysql cli
-  db.sh redis health
-EOF
-}
+# Ensure the runtime network exists
+ensure_network "$DBLAB_NETWORK_NAME"
 
 #######################
 # Command Preparation #
