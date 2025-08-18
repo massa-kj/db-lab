@@ -38,10 +38,10 @@ if [[ -z "$db" || "$db" == "-h" || "$db" == "--help" ]]; then
     usage; exit 1
 fi
 if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
-    # alias resolution
-    db="${DB_ALIASES[$db]}"
+    DBLAB_ENGINE="${DB_ALIASES[$db]}"
+else
+    DBLAB_ENGINE="$db"
 fi
-DBLAB_ENGINE="${db}"
 
 # Load environment variables for specific engine
 load_envs_if_exists "${ENGINE_ROOT}/${DBLAB_ENGINE}/default.env"
@@ -62,10 +62,12 @@ while [[ $# -gt 0 ]]; do
         *) DBLAB_EXTRA_ARGS+=("$1"); shift ;;
     esac
 done
-export DBLAB_ENGINE DBLAB_VER DBLAB_ENVFILES
+export DBLAB_ENGINE DBLAB_VER
 
 # Load environment variables for specific file
-load_envs_if_exists "${DBLAB_ENVFILES[@]:-}"
+if [[ ${#DBLAB_ENVFILES[@]} -gt 0 ]]; then
+    load_envs_if_exists "${DBLAB_ENVFILES[@]}"
+fi
 
 # Command resolution (engines/<engine>/cmd/<command>)
 cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
@@ -75,6 +77,6 @@ cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
 manifest_path="${ENGINE_ROOT}/${DBLAB_ENGINE}/manifest.sh"
 [[ -f "$manifest_path" ]] && source "$manifest_path"
 
-# Execute the command
+# Replace the shell with the engine command
 exec "$cmd_path" "${DBLAB_EXTRA_ARGS[@]}"
 
