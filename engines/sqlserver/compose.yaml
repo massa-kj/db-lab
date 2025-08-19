@@ -6,7 +6,7 @@ services:
     environment:
       ACCEPT_EULA: "Y" # EULA agreement (required)
       SA_PASSWORD: ${SA_PASSWORD?err} # Strong password of 8+ characters, including uppercase/lowercase letters, numbers, and symbols
-      MSSQL_PID: ${MSSQL_PID:-Developer} # Developer / Express / Standard / Enterprise / Evaluation, etc.
+      MSSQL_PID: ${MSSQL_PID:-Developer}
       # optional
       MSSQL_COLLATION: ${MSSQL_COLLATION:-SQL_Latin1_General_CP1_CI_AS}
       MSSQL_AGENT_ENABLED: ${MSSQL_AGENT_ENABLED:-false}
