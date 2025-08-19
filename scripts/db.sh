@@ -25,9 +25,6 @@ done
 source "$LIBRARY_ROOT/help.sh"
 source "$LIBRARY_ROOT/engine-lib.sh"
 
-# Ensure the runtime network exists
-ensure_network "$DBLAB_NETWORK_NAME"
-
 #######################
 # Command Preparation #
 #######################
@@ -57,8 +54,8 @@ DBLAB_EXTRA_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --ver) DBLAB_VER="$2:-"; shift 2 ;;
-        --env) DBLAB_ENVFILES+=("$2:-"); shift 2 ;;
+        --ver) DBLAB_VER="${2:-}"; shift 2 ;;
+        --env) DBLAB_ENVFILES+=("${2:-}"); shift 2 ;;
         *) DBLAB_EXTRA_ARGS+=("$1"); shift ;;
     esac
 done
@@ -68,6 +65,9 @@ export DBLAB_ENGINE DBLAB_VER
 if [[ ${#DBLAB_ENVFILES[@]} -gt 0 ]]; then
     load_envs_if_exists "${DBLAB_ENVFILES[@]}"
 fi
+
+# Ensure the runtime network exists
+ensure_network "$DBLAB_NETWORK_NAME"
 
 # Command resolution (engines/<engine>/cmd/<command>)
 cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
