@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "${LIBRARY_ROOT}/engine-lib.sh"
+
+ensure_network
+( cd "${ENGINE_ROOT}/sqlserver"
+    compose -f compose.yaml --profile engine up -d
+)
+

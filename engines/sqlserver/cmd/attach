@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$LIBRARY_ROOT/engine-lib.sh"
+
+( cd "$ENGINE_ROOT/sqlserver"
+    svc="${1:-}"
+    shift || true
+
+    compose -f compose.yaml --profile "${svc:-cli}" run --rm  "${svc:-cli}" /bin/bash
+)
+

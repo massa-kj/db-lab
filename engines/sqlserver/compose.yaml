@@ -1,0 +1,59 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2022-latest}
+    container_name: dblab-mssql-${MSSQL_VERSION:-2022-latest}
+    profiles: ["engine"]
+    environment:
+      ACCEPT_EULA: "Y" # EULA agreement (required)
+      SA_PASSWORD: ${SA_PASSWORD?err} # Strong password of 8+ characters, including uppercase/lowercase letters, numbers, and symbols
+      MSSQL_PID: ${MSSQL_PID:-Developer} # Developer / Express / Standard / Enterprise / Evaluation, etc.
+      # optional
+      MSSQL_COLLATION: ${MSSQL_COLLATION:-SQL_Latin1_General_CP1_CI_AS}
+      MSSQL_AGENT_ENABLED: ${MSSQL_AGENT_ENABLED:-false}
+    ports:
+      - "${HOST_PORT:-1433}:1433"
+    volumes:
+      - type: volume
+        source: mssql_data
+        target: /var/opt/mssql
+    healthcheck:
+      # Use tools v18 sqlcmd and trust TLS (-C) to check connectivity
+      test: [ "CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" >/dev/null" ]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+    networks: [dblab-net]
+
+  cli:
+    build:
+      context: .
+      dockerfile: cli.Dockerfile
+    container_name: ${PROJECT_NAME:-dblab-mssql}-cli
+    profiles: ["cli"]
+    environment:
+      DB_HOST: ${DB_HOST:-mssql}
+      DB_PORT: ${DB_PORT:-1433}
+      DB_USER: ${DB_USER:-sa}
+      DB_PASSWORD: ${SA_PASSWORD}
+      DB_NAME: ${DB_NAME:-master}
+      CLI_TOOL: ${CLI_TOOL:-/opt/mssql-tools18/bin/sqlcmd}
+    entrypoint: [ "bash", "-lc" ]
+    working_dir: /work
+    volumes:
+      - type: bind
+        source: ./work
+        target: /work
+    tty: true
+    stdin_open: true
+    networks: [dblab-net]
+
+volumes:
+  mssql_data: {}
+
+networks:
+  dblab-net:
+    name: ${DBLAB_NETWORK_NAME:-dblab-net}
+    external: true
+

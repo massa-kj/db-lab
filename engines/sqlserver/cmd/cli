@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$LIBRARY_ROOT/engine-lib.sh"
+
+( cd "$ENGINE_ROOT/sqlserver"
+    case "${CLI_TOOL}" in
+        "/opt/mssql-tools18/bin/sqlcmd")
+            cmd="${CLI_TOOL} -C -S ${DB_HOST},${DB_PORT} -U ${DB_USER} -P "${DB_PASSWORD}" -d ${DB_NAME}"
+            ;;
+        *)
+            echo "Unsupported CLI tool: ${CLI_TOOL}"
+            exit 1
+            ;;
+    esac
+    compose -f compose.yaml --profile cli run --rm cli "$cmd"
+)
+
