@@ -5,8 +5,8 @@ A sandbox environment for experimenting with SQL and NoSQL databases using conta
 ## Features
 
 - Supports multiple databases
-  - PostgreSQL
-  - SQL Server
+  - PostgreSQL  
+  - SQL Server  
     Pull the official Microsoft image. Please refer to the SQL Server [README](./engines/sqlserver/README.md) or the official documentation.
 - Containerized environment for easy setup
 - Command-line interface for executing SQL files

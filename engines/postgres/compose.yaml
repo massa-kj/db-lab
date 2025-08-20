@@ -7,7 +7,7 @@ services:
     ports:
       - "${PGPORT:-5432}:5432"
     # ports:
-    #   - "${HOST_BIND:-127.0.0.1}:${PGPORT:-55432}:5432"
+    #   - "${PGHOST:-postgres}:${PGPORT:-55432}:5432"
     environment:
       POSTGRES_PASSWORD: ${PGPASSWORD:-postgres}
       POSTGRES_USER: ${PGUSER:-postgres}
