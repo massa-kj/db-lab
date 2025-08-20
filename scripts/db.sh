@@ -73,10 +73,6 @@ ensure_network "$DBLAB_NETWORK_NAME"
 cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
 || die "unknown command: $DBLAB_ENGINE $DBLAB_COMMAND"
 
-# Load the engine's manifest to inject defaults/capabilities
-manifest_path="${ENGINE_ROOT}/${DBLAB_ENGINE}/manifest.sh"
-[[ -f "$manifest_path" ]] && source "$manifest_path"
-
 # Replace the shell with the engine command
 exec "$cmd_path" "${DBLAB_EXTRA_ARGS[@]}"
 
