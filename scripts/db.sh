@@ -22,15 +22,34 @@ load_engine_metas() {
     done
 }
 
-# Parses only common arguments and options (such as database name and command).
+# Validate common arguments.
 # Engine-specific arguments/options should be handled by each engine's script.
-parse_common_args() {
-    db="${1:-}"; DBLAB_COMMAND="${2:-}"
-    if [[ -z "${db}" || "${db}" == "-h" || "${db}" == "--help" ]]; then
-        usage; exit 1
+validate_common_args() {
+    local db="$1" cmd="$2"
+    [[ -z "$db" || "$db" == "-h" || "$db" == "--help" ]] && return 1
+    [[ -z "$cmd" ]] && return 1
+    return 0
+}
+
+resolve_engine() {
+    local db="$1"
+    if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
+        echo "${DB_ALIASES[$db]}"
+    else
+        echo "$db"
     fi
-    if [[ -z "${DBLAB_COMMAND}" ]]; then
-        usage; exit 1
+}
+
+load_engine_envs() {
+    local engine="$1"
+    shift 1
+    local envfiles=("$@")
+
+    # Load environment variables for specific engine
+    load_envs_if_exists "${ENGINE_ROOT}/${engine}/default.env"
+    # Load environment variables for specific file
+    if [[ ${#envfiles[@]} -gt 0 ]]; then
+        load_envs_if_exists "${envfiles[@]}"
     fi
 }
 
@@ -55,14 +74,20 @@ main() {
     #######################
     # Command Preparation #
     #######################
-    parse_common_args "$@"
-    shift 2
-
-    if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
-        DBLAB_ENGINE="${DB_ALIASES[$db]}"
-    else
-        DBLAB_ENGINE="$db"
+    local db="${1:-}" cmd="${2:-}"
+    if [[ $# -ge 2 ]]; then
+        shift 2
+    elif [[ $# -eq 1 ]]; then
+        shift 1
     fi
+
+    if ! validate_common_args "$db" "$cmd"; then
+        usage
+        die "Invalid arguments"
+    fi
+
+    DBLAB_COMMAND="$cmd"
+    DBLAB_ENGINE="$(resolve_engine "$db")"
     export DBLAB_ENGINE
 
     # Pre-read common flags (such as --ver, --env, etc. are interpreted by the core and passed to the environment)
@@ -76,12 +101,7 @@ main() {
         esac
     done
 
-    # Load environment variables for specific engine
-    load_envs_if_exists "${ENGINE_ROOT}/${DBLAB_ENGINE}/default.env"
-    # Load environment variables for specific file
-    if [[ ${#DBLAB_ENVFILES[@]} -gt 0 ]]; then
-        load_envs_if_exists "${DBLAB_ENVFILES[@]}"
-    fi
+    load_engine_envs "$DBLAB_ENGINE" "${DBLAB_ENVFILES[@]}"
 
     # Ensure the runtime network exists
     ensure_network "$DBLAB_NETWORK_NAME"
