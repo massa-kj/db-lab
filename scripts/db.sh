@@ -22,8 +22,12 @@ load_engine_metas() {
     done
 }
 
-# Validate common arguments.
-# Engine-specific arguments/options should be handled by each engine's script.
+# Checks that both the database name and command are provided.
+# Arguments:
+#   $1 - Database name (must not be empty or a help flag)
+#   $2 - Command (must not be empty)
+# Returns:
+#   0 if both arguments are valid, 1 otherwise.
 validate_common_args() {
     local db="$1" cmd="$2"
     [[ -z "$db" || "$db" == "-h" || "$db" == "--help" ]] && return 1
@@ -31,6 +35,11 @@ validate_common_args() {
     return 0
 }
 
+# Resolves the database engine name for a given database alias.
+# Arguments:
+#   $1 - Database alias (e.g., "mysql", "postgres")
+# Returns:
+#   The resolved database engine name.
 resolve_engine() {
     local db="$1"
     if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
@@ -40,6 +49,12 @@ resolve_engine() {
     fi
 }
 
+# Loads environment variables for a specific database engine and additional environment files if provided.
+# First, loads the default environment file for the given engine.
+# Then, if any extra environment files are specified, loads them as well.
+# Arguments:
+#   $1 - Engine name (e.g., "mysql", "postgres")
+#   $@ - Additional environment files to load
 load_engine_envs() {
     local engine="$1"
     shift 1
@@ -90,10 +105,11 @@ main() {
     DBLAB_ENGINE="$(resolve_engine "$db")"
     export DBLAB_ENGINE
 
-    # Pre-read common flags (such as --ver, --env, etc. are interpreted by the core and passed to the environment)
+    # Pre-read common flags (such as --env, etc. are interpreted by the core and passed to the environment)
     DBLAB_ENVFILES=()
     DBLAB_EXTRA_ARGS=()
 
+    # Process additional arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --env) DBLAB_ENVFILES+=("${2:-}"); shift 2 ;;
@@ -108,7 +124,7 @@ main() {
 
     # Command resolution (engines/<engine>/cmd/<command>)
     cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
-    || die "unknown command: $DBLAB_ENGINE $DBLAB_COMMAND"
+        || die "unknown command: $DBLAB_ENGINE $DBLAB_COMMAND"
 
     # Replace the shell with the engine command
     exec "$cmd_path" "${DBLAB_EXTRA_ARGS[@]}"
