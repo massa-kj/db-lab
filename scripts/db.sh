@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Initializes and exports key directory paths used by the DBLab scripts.
+# - DBLAB_ROOT: Root directory of the DBLab project.
+# - LIBRARY_ROOT: Directory containing shared script libraries.
+# - ENGINE_ROOT: Directory containing engines.
 init_paths() {
     DBLAB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     LIBRARY_ROOT="$DBLAB_ROOT/scripts/lib"
@@ -8,6 +12,8 @@ init_paths() {
     export DBLAB_ROOT LIBRARY_ROOT ENGINE_ROOT
 }
 
+# Loads engine-specific metadata by sourcing each engine.
+# This allows engine-specific configurations and variables to be set in the environment.
 load_engine_metas() {
     # Load each engine's meta.sh to get engine-specific configurations
     for meta in "${ENGINE_ROOT}"/*/meta.sh; do
@@ -16,7 +22,9 @@ load_engine_metas() {
     done
 }
 
-parse_head_args() {
+# Parses only common arguments and options (such as database name and command).
+# Engine-specific arguments/options should be handled by each engine's script.
+parse_common_args() {
     db="${1:-}"; DBLAB_COMMAND="${2:-}"
     if [[ -z "${db}" || "${db}" == "-h" || "${db}" == "--help" ]]; then
         usage; exit 1
@@ -47,7 +55,7 @@ main() {
     #######################
     # Command Preparation #
     #######################
-    parse_head_args "$@"
+    parse_common_args "$@"
     shift 2
 
     if [[ -n "${DB_ALIASES[$db]+_}" ]]; then
