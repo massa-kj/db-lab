@@ -65,23 +65,19 @@ main() {
     fi
     export DBLAB_ENGINE
 
-    # Load environment variables for specific engine
-    load_envs_if_exists "${ENGINE_ROOT}/${DBLAB_ENGINE}/default.env"
-
     # Pre-read common flags (such as --ver, --env, etc. are interpreted by the core and passed to the environment)
-    DBLAB_VER=""
     DBLAB_ENVFILES=()
     DBLAB_EXTRA_ARGS=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --ver) DBLAB_VER="${2:-}"; shift 2 ;;
             --env) DBLAB_ENVFILES+=("${2:-}"); shift 2 ;;
             *) DBLAB_EXTRA_ARGS+=("$1"); shift ;;
         esac
     done
-    export DBLAB_VER
 
+    # Load environment variables for specific engine
+    load_envs_if_exists "${ENGINE_ROOT}/${DBLAB_ENGINE}/default.env"
     # Load environment variables for specific file
     if [[ ${#DBLAB_ENVFILES[@]} -gt 0 ]]; then
         load_envs_if_exists "${DBLAB_ENVFILES[@]}"
