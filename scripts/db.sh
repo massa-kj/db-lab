@@ -101,13 +101,13 @@ main() {
         die "Invalid arguments"
     fi
 
-    DBLAB_COMMAND="$cmd"
+    local DBLAB_COMMAND="$cmd"
     DBLAB_ENGINE="$(resolve_engine "$db")"
     export DBLAB_ENGINE
 
     # Pre-read common flags (such as --env, etc. are interpreted by the core and passed to the environment)
-    DBLAB_ENVFILES=()
-    DBLAB_EXTRA_ARGS=()
+    local DBLAB_ENVFILES=()
+    local DBLAB_EXTRA_ARGS=()
 
     # Process additional arguments
     while [[ $# -gt 0 ]]; do
@@ -123,7 +123,7 @@ main() {
     ensure_network "$DBLAB_NETWORK_NAME"
 
     # Command resolution (engines/<engine>/cmd/<command>)
-    cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
+    local cmd_path="$(resolve_engine_command "$DBLAB_ENGINE" "$DBLAB_COMMAND")" \
         || die "unknown command: $DBLAB_ENGINE $DBLAB_COMMAND"
 
     # Replace the shell with the engine command
