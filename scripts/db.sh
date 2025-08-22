@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# TODO: Improve the logging and error handling
+log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
+die() { printf '[ERROR]: %s\n' "$*" >&2; exit 1; }
+
 # Initializes and exports key directory paths used by the DBLab scripts.
 # - DBLAB_ROOT: Root directory of the DBLab project.
 # - LIBRARY_ROOT: Directory containing shared script libraries.
@@ -55,7 +59,6 @@ main() {
     ######################
     init_paths
 
-    source "$LIBRARY_ROOT/core.sh"
     source "$LIBRARY_ROOT/registry.sh"
     source "$LIBRARY_ROOT/env-loader.sh"
     source "$LIBRARY_ROOT/resolver.sh"
