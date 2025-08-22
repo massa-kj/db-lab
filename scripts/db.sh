@@ -49,25 +49,6 @@ resolve_engine() {
     fi
 }
 
-# Loads environment variables for a specific database engine and additional environment files if provided.
-# First, loads the default environment file for the given engine.
-# Then, if any extra environment files are specified, loads them as well.
-# Arguments:
-#   $1 - Engine name (e.g., "mysql", "postgres")
-#   $@ - Additional environment files to load
-load_engine_envs() {
-    local engine="$1"
-    shift 1
-    local envfiles=("$@")
-
-    # Load environment variables for specific engine
-    load_envs_if_exists "${ENGINE_ROOT}/${engine}/default.env"
-    # Load environment variables for specific file
-    if [[ ${#envfiles[@]} -gt 0 ]]; then
-        load_envs_if_exists "${envfiles[@]}"
-    fi
-}
-
 main() {
     ######################
     # Common Preparation #
@@ -76,10 +57,8 @@ main() {
 
     source "$LIBRARY_ROOT/core.sh"
     source "$LIBRARY_ROOT/registry.sh"
+    source "$LIBRARY_ROOT/env-loader.sh"
     source "$LIBRARY_ROOT/resolver.sh"
-
-    # Load default common environment variables
-    load_envs_if_exists "$DBLAB_ROOT/env/default.env" "$DBLAB_ROOT/env/local.env"
 
     load_engine_metas
 
@@ -117,7 +96,7 @@ main() {
         esac
     done
 
-    load_engine_envs "$DBLAB_ENGINE" "${DBLAB_ENVFILES[@]}"
+    load_env_layers "$DBLAB_ENGINE" "${DBLAB_ENVFILES[@]}"
 
     # Ensure the runtime network exists
     ensure_network "$DBLAB_NETWORK_NAME"
