@@ -1,0 +1,52 @@
+# PostgreSQL engine metadata
+engine: postgres
+
+version:
+  default: "16"
+  supported:
+    - "16"
+    - "15"
+    - "14"
+    - "13"
+
+required_env:
+  - DBLAB_PG_VERSION
+  - DBLAB_PG_USER
+  - DBLAB_PG_PASSWORD
+  - DBLAB_PG_DATABASE
+
+defaults:
+  DBLAB_PG_VERSION: "16"
+  DBLAB_PG_USER: "postgres"
+  DBLAB_PG_DATABASE: "app"
+  DBLAB_PG_PORT: "5432"
+  DBLAB_EPHEMERAL: false
+  DBLAB_NETWORK_MODE: "isolated"
+  DBLAB_EXPOSE_ENABLED: false
+
+validation:
+  user_regex: "^[a-zA-Z0-9_]+$"
+  dbname_regex: "^[a-zA-Z0-9_]+$"
+
+generate_template:
+  comments:
+    DBLAB_PG_VERSION: "Image tag (ex: 16, 16-alpine)"
+    DBLAB_PG_USER: "Initial admin user"
+    DBLAB_PG_PASSWORD: "Initial password"
+    DBLAB_PG_DATABASE: "Initial database name"
+    DBLAB_EPHEMERAL: "If true, data is not persisted"
+  order:
+    - DBLAB_PG_VERSION
+    - DBLAB_PG_USER
+    - DBLAB_PG_PASSWORD
+    - DBLAB_PG_DATABASE
+    - DBLAB_EPHEMERAL
+
+cli:
+  image: "postgres:{{version}}"
+  command: "psql"
+  args:
+    - "-h"
+    - "{{hostname}}"
+    - "-U"
+    - "{{user}}"

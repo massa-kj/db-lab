@@ -1,0 +1,50 @@
+# SQL Server engine metadata
+engine: sqlserver
+
+version:
+  default: "2022-latest"
+  supported:
+    - "2022-latest"
+    - "2019-latest"
+    - "2017-latest"
+
+required_env:
+  - DBLAB_SQLSERVER_VERSION
+  - DBLAB_SQLSERVER_SA_PASSWORD
+  - DBLAB_SQLSERVER_DATABASE
+
+defaults:
+  DBLAB_SQLSERVER_VERSION: "2022-latest"
+  DBLAB_SQLSERVER_DATABASE: "app"
+  DBLAB_SQLSERVER_PORT: "1433"
+  DBLAB_EPHEMERAL: false
+  DBLAB_NETWORK_MODE: "isolated"
+  DBLAB_EXPOSE_ENABLED: false
+
+validation:
+  # SQL Server SA password must be at least 8 characters with complexity requirements
+  password_min_length: 8
+  dbname_regex: "^[a-zA-Z0-9_]+$"
+
+generate_template:
+  comments:
+    DBLAB_SQLSERVER_VERSION: "Image tag (ex: 2022-latest, 2019-latest)"
+    DBLAB_SQLSERVER_SA_PASSWORD: "SA user password (min 8 chars with complexity)"
+    DBLAB_SQLSERVER_DATABASE: "Initial database name"
+    DBLAB_EPHEMERAL: "If true, data is not persisted"
+  order:
+    - DBLAB_SQLSERVER_VERSION
+    - DBLAB_SQLSERVER_SA_PASSWORD
+    - DBLAB_SQLSERVER_DATABASE
+    - DBLAB_EPHEMERAL
+
+cli:
+  image: "mcr.microsoft.com/mssql-tools"
+  command: "sqlcmd"
+  args:
+    - "-S"
+    - "{{hostname}},{{port}}"
+    - "-U"
+    - "sa"
+    - "-d"
+    - "{{database}}"
