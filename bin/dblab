@@ -1,0 +1,424 @@
+#!/bin/bash
+
+# bin/dblab - Main dblab CLI entry point
+# Provides unified interface for database container management
+
+set -euo pipefail
+
+# Get script directory and source core utilities
+# Handle symlinks properly
+if [[ -L "${BASH_SOURCE[0]}" ]]; then
+    # Script is a symlink, resolve it
+    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+else
+    SCRIPT_PATH="${BASH_SOURCE[0]}"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+CORE_DIR="${PROJECT_DIR}/core"
+ENGINES_DIR="${PROJECT_DIR}/engines"
+
+# Source core modules
+source "${CORE_DIR}/lib.sh"
+source "${CORE_DIR}/env_loader.sh"
+source "${CORE_DIR}/detect_engine.sh"
+source "${CORE_DIR}/env_template.sh"
+
+# Safely ensure script is executable (ignore permission errors)
+ensure_executable() {
+    local script_path="$1"
+    if [[ -f "$script_path" ]]; then
+        if [[ -w "$script_path" ]]; then
+            chmod +x "$script_path" 2>/dev/null || log_debug "Cannot change permissions for $script_path (this is normal for system installations)"
+        else
+            log_debug "Script not writable, assuming correct permissions: $script_path"
+        fi
+    else
+        die "Script not found: $script_path"
+    fi
+}
+
+# Global variables for command line parsing
+COMMAND=""
+ENGINE=""
+INSTANCE=""
+ENV_FILES=()
+CLI_OVERRIDES=()
+DEBUG_MODE="false"
+HELP_MODE="false"
+VERBOSE_MODE="false"
+EXPOSE_PORTS=""
+
+# Show usage information
+show_usage() {
+    cat << EOF
+dblab - Database container management tool
+
+USAGE:
+    dblab <command> <engine> [options]
+    dblab <global-command> [options]
+
+COMMANDS:
+    init <engine>     Generate template env file for instance
+    up <engine>       Start database instance
+    down <engine>     Stop database instance
+    status <engine>   Show instance status
+    destroy <engine>  Remove instance and all data (destructive)
+    list <engine>     List instances for engine
+    list <engine> -v  List instances with detailed information
+    help              Show this help message
+
+ENGINES:
+    postgres          PostgreSQL database
+
+GLOBAL OPTIONS:
+    --instance, -i <name>    Instance name (required for most commands)
+    --env-file <path>        Load environment from file (can be used multiple times)
+    --expose <port[:port]>   Expose port(s) to host (format: 5432 or 5432:5432)
+    --verbose, -v            Show detailed information (for list command)
+    --debug                  Enable debug logging
+    --help, -h               Show help message
+
+EXAMPLES:
+    # Start PostgreSQL instance with env file
+    dblab up postgres --instance pg16 --env-file pg16.env
+    
+    # Start PostgreSQL instance with port exposure
+    dblab up postgres --instance pg16 --env-file pg16.env --expose 5432
+    
+    # Start with custom port mapping
+    dblab up postgres --instance pg16 --env-file pg16.env --expose 15432:5432
+    
+    # Stop PostgreSQL instance
+    dblab down postgres --instance pg16
+    
+    # Check status
+    dblab status postgres --instance pg16
+    
+    # Destroy instance (removes all data)
+    dblab destroy postgres --instance pg16
+    
+    # List all postgres instances
+    dblab list postgres
+    
+    # List with detailed information
+    dblab list postgres --verbose
+
+ENVIRONMENT VARIABLES:
+    DBLAB_LOG_LEVEL          Log level (error|warn|info|debug|trace)
+    DBLAB_BASE_DIR           Base directory for data storage
+    CONTAINER_BACKEND        Container runtime (podman|docker)
+
+For more information, see the documentation.
+EOF
+}
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)
+                HELP_MODE="true"
+                return 0
+                ;;
+            --debug)
+                DEBUG_MODE="true"
+                export DBLAB_LOG_LEVEL="debug"
+                shift
+                ;;
+            --verbose|-v)
+                VERBOSE_MODE="true"
+                shift
+                ;;
+            --instance|-i)
+                if [[ $# -lt 2 ]]; then
+                    die "Option $1 requires an argument"
+                fi
+                INSTANCE="$2"
+                shift 2
+                ;;
+            --env-file|-e)
+                if [[ $# -lt 2 ]]; then
+                    die "Option $1 requires an argument"
+                fi
+                ENV_FILES+=("$2")
+                shift 2
+                ;;
+            --expose)
+                if [[ $# -lt 2 ]]; then
+                    die "Option $1 requires an argument"
+                fi
+                EXPOSE_PORTS="$2"
+                shift 2
+                ;;
+            --*)
+                die "Unknown option: $1"
+                ;;
+            *)
+                # First non-option argument is the command
+                if [[ -z "$COMMAND" ]]; then
+                    COMMAND="$1"
+                    shift
+                # Second non-option argument is the engine (for most commands)
+                elif [[ -z "$ENGINE" && "$COMMAND" != "help" ]]; then
+                    ENGINE="$1"
+                    shift
+                else
+                    die "Unexpected argument: $1"
+                fi
+                ;;
+        esac
+    done
+}
+
+# Validate command line arguments
+validate_args() {
+    if [[ "$HELP_MODE" == "true" || "$COMMAND" == "help" ]]; then
+        return 0
+    fi
+    
+    if [[ -z "$COMMAND" ]]; then
+        die "Command is required. Use 'dblab help' for usage information."
+    fi
+    
+    case "$COMMAND" in
+        up|down|status|destroy)
+            if [[ -z "$ENGINE" ]]; then
+                die "Engine is required for command '$COMMAND'"
+            fi
+            
+            if [[ -z "$INSTANCE" ]]; then
+                die "Instance name is required for command '$COMMAND'. Use --instance <name>"
+            fi
+            ;;
+        init)
+            if [[ -z "$ENGINE" ]]; then
+                die "Engine is required for command '$COMMAND'"
+            fi
+            
+            if [[ -z "$INSTANCE" ]]; then
+                die "Instance name is required for command '$COMMAND'. Use --instance <name>"
+            fi
+            ;;
+        list)
+            if [[ -z "$ENGINE" ]]; then
+                die "Engine is required for command '$COMMAND'"
+            fi
+            ;;
+        *)
+            die "Unknown command: $COMMAND. Use 'dblab help' for usage information."
+            ;;
+    esac
+    
+    # Validate engine if provided
+    if [[ -n "$ENGINE" ]]; then
+        validate_engine "$ENGINE"
+    fi
+    
+    # Validate instance name if provided
+    if [[ -n "$INSTANCE" ]]; then
+        validate_instance_name "$INSTANCE"
+    fi
+    
+    # Validate env files exist
+    for env_file in "${ENV_FILES[@]}"; do
+        if [[ ! -f "$env_file" ]]; then
+            die "Environment file not found: $env_file"
+        fi
+    done
+}
+
+# Execute up command
+cmd_up() {
+    local engine="$1"
+    local instance="$2"
+    
+    log_info "Starting $engine instance: $instance"
+    
+    # Get engine script and metadata paths
+    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
+    local metadata_file="${ENGINES_DIR}/${engine}/metadata.yml"
+    
+    if [[ ! -f "$engine_script" ]]; then
+        die "Engine script not found: $engine_script"
+    fi
+    
+    if [[ ! -f "$metadata_file" ]]; then
+        die "Engine metadata not found: $metadata_file"
+    fi
+    
+    # Validate environment files if provided
+    for env_file in "${ENV_FILES[@]}"; do
+        log_debug "Validating environment file: $env_file"
+        if ! validate_env_file "$env_file" "$metadata_file"; then
+            die "Environment validation failed for: $env_file"
+        fi
+    done
+    
+    # Set expose environment variables if --expose is specified
+    if [[ -n "$EXPOSE_PORTS" ]]; then
+        export DBLAB_EXPOSE_ENABLED="true"
+        export DBLAB_EXPOSE_PORTS="$EXPOSE_PORTS"
+        log_debug "Port exposure enabled: $EXPOSE_PORTS"
+    fi
+    
+    # Make sure script is executable
+    ensure_executable "$engine_script"
+    
+    # Execute engine up command
+    "$engine_script" up "$instance" "${ENV_FILES[@]}"
+}
+
+# Execute down command
+cmd_down() {
+    local engine="$1"
+    local instance="$2"
+    
+    log_info "Stopping $engine instance: $instance"
+    
+    # Get engine script path
+    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
+    
+    if [[ ! -f "$engine_script" ]]; then
+        die "Engine script not found: $engine_script"
+    fi
+    
+    # Make sure script is executable
+    ensure_executable "$engine_script"
+    
+    # Execute engine down command
+    "$engine_script" down "$instance"
+}
+
+# Execute status command
+cmd_status() {
+    local engine="$1"
+    local instance="$2"
+    
+    log_info "Checking status of $engine instance: $instance"
+    
+    # Get engine script path
+    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
+    
+    if [[ ! -f "$engine_script" ]]; then
+        die "Engine script not found: $engine_script"
+    fi
+    
+    # Make sure script is executable
+    ensure_executable "$engine_script"
+    
+    # Execute engine status command
+    local status
+    status=$("$engine_script" status "$instance")
+    
+    log_info "Instance $engine/$instance status: $status"
+}
+
+# Execute list command
+cmd_list() {
+    local engine="$1"
+    
+    log_info "Listing $engine instances"
+    
+    # Source necessary modules for enhanced list functionality
+    source "${CORE_DIR}/instance_loader.sh"
+    source "${CORE_DIR}/runner.sh"
+    
+    # Initialize runner to get container status functions
+    init_runner 2>/dev/null || true
+    
+    list_instances "$engine" "$VERBOSE_MODE"
+}
+
+# Execute init command
+cmd_init() {
+    local engine="$1"
+    local instance="$2"
+    
+    log_info "Generating template environment file for $engine instance: $instance"
+    
+    # Get engine metadata path
+    local metadata_file="${ENGINES_DIR}/${engine}/metadata.yml"
+    
+    if [[ ! -f "$metadata_file" ]]; then
+        die "Engine metadata not found: $metadata_file"
+    fi
+    
+    # Generate template env file
+    generate_env_template "$engine" "$instance" "$metadata_file"
+}
+
+# Execute destroy command
+cmd_destroy() {
+    local engine="$1"
+    local instance="$2"
+    
+    log_info "Destroying $engine instance: $instance"
+    
+    # Get engine script path
+    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
+    
+    if [[ ! -f "$engine_script" ]]; then
+        die "Engine script not found: $engine_script"
+    fi
+    
+    # Make sure script is executable
+    ensure_executable "$engine_script"
+    
+    # Execute engine destroy command
+    "$engine_script" destroy "$instance"
+}
+
+# Main execution function
+main() {
+    # Initialize logging
+    init_dblab
+    
+    # Parse command line arguments
+    parse_args "$@"
+    
+    # Show help if requested
+    if [[ "$HELP_MODE" == "true" || "$COMMAND" == "help" ]]; then
+        show_usage
+        exit 0
+    fi
+    
+    # Validate arguments
+    validate_args
+    
+    # Set up error handling
+    trap_error
+    
+    log_debug "Command: $COMMAND, Engine: $ENGINE, Instance: $INSTANCE"
+    log_debug "Environment files: ${ENV_FILES[*]}"
+    
+    # Execute command
+    case "$COMMAND" in
+        init)
+            cmd_init "$ENGINE" "$INSTANCE"
+            ;;
+        up)
+            cmd_up "$ENGINE" "$INSTANCE"
+            ;;
+        down)
+            cmd_down "$ENGINE" "$INSTANCE"
+            ;;
+        status)
+            cmd_status "$ENGINE" "$INSTANCE"
+            ;;
+        destroy)
+            cmd_destroy "$ENGINE" "$INSTANCE"
+            ;;
+        list)
+            cmd_list "$ENGINE"
+            ;;
+        *)
+            die "Internal error: Unknown command: $COMMAND"
+            ;;
+    esac
+    
+    log_debug "Command completed successfully"
+}
+
+# Run main function
+main "$@"
