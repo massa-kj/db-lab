@@ -99,7 +99,16 @@ create_instance() {
     local network_name
     network_name=$(get_network_name "$engine" "$instance" "$network_mode")
     
-    local image="${engine}:${version}"
+    local image
+    case "$engine" in
+        postgres) image="postgres:${version}" ;;
+        mysql) image="mysql:${version}" ;;
+        redis) image="redis:${version}" ;;
+        mongodb) image="mongo:${version}" ;;
+        sqlserver) image="mcr.microsoft.com/mssql/server:${version}" ;;
+        *) die "Unsupported engine: $engine" ;;
+    esac
+
     local created_timestamp
     created_timestamp=$(date -Iseconds)
     
