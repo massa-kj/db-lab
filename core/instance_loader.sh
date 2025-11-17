@@ -1,0 +1,444 @@
+#!/bin/bash
+
+# core/instance_loader.sh - Instance metadata management
+# Handles instance.yml files for persistent instance configuration
+
+set -euo pipefail
+
+# Source core utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib.sh"
+
+# Instance state structure
+declare -A INSTANCE_CONFIG=()
+
+# Get instance file path
+get_instance_file() {
+    local engine="$1"
+    local instance="$2"
+    
+    validate_engine_name "$engine"
+    validate_instance_name "$instance"
+    
+    local data_dir
+    data_dir=$(get_data_dir "$engine" "$instance")
+    echo "${data_dir}/instance.yml"
+}
+
+# Check if instance exists
+instance_exists() {
+    local engine="$1"
+    local instance="$2"
+    
+    local instance_file
+    instance_file=$(get_instance_file "$engine" "$instance")
+    
+    [[ -f "$instance_file" ]]
+}
+
+# Generate container name for instance
+get_container_name() {
+    local engine="$1"
+    local instance="$2"
+    
+    echo "dblab_${engine}_${instance}"
+}
+
+# Generate network name for instance
+get_network_name() {
+    local engine="$1"
+    local instance="$2"
+    local mode="${3:-isolated}"
+    
+    case "$mode" in
+        isolated)
+            echo "dblab_${engine}_${instance}_net"
+            ;;
+        engine-shared)
+            echo "dblab_${engine}_shared_net"
+            ;;
+        *)
+            die "Unknown network mode: $mode"
+            ;;
+    esac
+}
+
+# Create new instance configuration
+create_instance() {
+    local engine="$1"
+    local instance="$2"
+    local version="$3"
+    local user="$4"
+    local password="$5"
+    local database="$6"
+    local network_mode="${7:-isolated}"
+    local ephemeral="${8:-false}"
+    local port="${9:-}"
+    
+    validate_engine_name "$engine"
+    validate_instance_name "$instance"
+    
+    if instance_exists "$engine" "$instance"; then
+        die "Instance already exists: $engine/$instance"
+    fi
+    
+    log_info "Creating new instance: $engine/$instance"
+    
+    # Create instance directory
+    local data_dir
+    data_dir=$(get_data_dir "$engine" "$instance")
+    ensure_dir "$data_dir"
+    ensure_dir "${data_dir}/data"
+    ensure_dir "${data_dir}/config"
+    ensure_dir "${data_dir}/logs"
+    
+    # Generate instance configuration
+    local container_name
+    container_name=$(get_container_name "$engine" "$instance")
+    
+    local network_name
+    network_name=$(get_network_name "$engine" "$instance" "$network_mode")
+    
+    local image="${engine}:${version}"
+    local created_timestamp
+    created_timestamp=$(date -Iseconds)
+    
+    # Determine default port if not provided
+    if [[ -z "$port" ]]; then
+        case "$engine" in
+            postgres) port="5432" ;;
+            mysql) port="3306" ;;
+            redis) port="6379" ;;
+            mongodb) port="27017" ;;
+            *) port="5432" ;;  # fallback
+        esac
+    fi
+    
+    # Create instance.yml file
+    local instance_file
+    instance_file=$(get_instance_file "$engine" "$instance")
+    
+    cat > "$instance_file" << EOF
+# Instance configuration for $engine/$instance
+# This file is managed by dblab and should not be edited manually
+
+engine: $engine
+instance: $instance
+version: "$version"
+
+network:
+  mode: $network_mode
+  name: $network_name
+
+image: "$image"
+created: "$created_timestamp"
+
+# Database configuration (fixed attributes)
+db:
+  user: $user
+  password: "$password"
+  database: $database
+  port: $port
+
+# Storage configuration (fixed attributes)
+storage:
+  persistent: $([ "$ephemeral" = "true" ] && echo "false" || echo "true")
+  data_dir: "${data_dir}/data"
+  config_dir: "${data_dir}/config"
+  log_dir: "${data_dir}/logs"
+
+# Runtime configuration (changeable)
+runtime:
+  expose:
+    enabled: false
+    ports: []
+  resources:
+    memory: null
+    cpus: null
+
+# Internal state
+state:
+  container_name: $container_name
+  last_up: null
+  last_down: null
+  status: "created"
+EOF
+
+    log_info "Instance created successfully: $instance_file"
+}
+
+# Load instance configuration into memory
+load_instance() {
+    local engine="$1"
+    local instance="$2"
+    
+    if ! instance_exists "$engine" "$instance"; then
+        die "Instance does not exist: $engine/$instance"
+    fi
+    
+    local instance_file
+    instance_file=$(get_instance_file "$engine" "$instance")
+    
+    log_debug "Loading instance configuration: $instance_file"
+    
+    # Clear previous configuration
+    INSTANCE_CONFIG=()
+    
+    # Simple YAML parsing for flat key-value pairs
+    while IFS= read -r line; do
+        # Skip empty lines and comments
+        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        
+        # Parse simple key: value pairs (flatten nested structure)
+        if [[ "$line" =~ ^[[:space:]]*([a-zA-Z_]+):[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            
+            # Remove quotes if present
+            value=$(echo "$value" | sed 's/^"//;s/"$//')
+            
+            INSTANCE_CONFIG[$key]="$value"
+        fi
+        
+        # Handle nested keys (simple flattening)
+        if [[ "$line" =~ ^[[:space:]]+([a-zA-Z_]+):[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            
+            # Remove quotes if present
+            value=$(echo "$value" | sed 's/^"//;s/"$//')
+            
+            INSTANCE_CONFIG[$key]="$value"
+        fi
+    done < "$instance_file"
+    
+    log_debug "Instance configuration loaded"
+}
+
+# Get instance configuration value
+get_instance_config() {
+    local key="$1"
+    local default="${2:-}"
+    
+    echo "${INSTANCE_CONFIG[$key]:-$default}"
+}
+
+# Update instance state
+update_instance_state() {
+    local engine="$1"
+    local instance="$2"
+    local key="$3"
+    local value="$4"
+    
+    if ! instance_exists "$engine" "$instance"; then
+        die "Instance does not exist: $engine/$instance"
+    fi
+    
+    local instance_file
+    instance_file=$(get_instance_file "$engine" "$instance")
+    local timestamp
+    timestamp=$(date -Iseconds)
+    
+    log_debug "Updating instance state: $key=$value"
+    
+    # Create a backup
+    cp "$instance_file" "${instance_file}.backup"
+    
+    # Update the specific key in the state section
+    case "$key" in
+        last_up)
+            sed -i "s/^[[:space:]]*last_up:.*/  last_up: \"$timestamp\"/" "$instance_file"
+            ;;
+        last_down)
+            sed -i "s/^[[:space:]]*last_down:.*/  last_down: \"$timestamp\"/" "$instance_file"
+            ;;
+        status)
+            sed -i "s/^[[:space:]]*status:.*/  status: \"$value\"/" "$instance_file"
+            ;;
+        *)
+            log_warn "Unknown state key: $key"
+            ;;
+    esac
+    
+    # Remove backup on success
+    rm "${instance_file}.backup"
+}
+
+# Update runtime configuration
+update_runtime_config() {
+    local engine="$1"
+    local instance="$2"
+    local section="$3"
+    local key="$4"
+    local value="$5"
+    
+    if ! instance_exists "$engine" "$instance"; then
+        die "Instance does not exist: $engine/$instance"
+    fi
+    
+    local instance_file
+    instance_file=$(get_instance_file "$engine" "$instance")
+    
+    log_debug "Updating runtime config: $section.$key=$value"
+    
+    # Create a backup
+    cp "$instance_file" "${instance_file}.backup"
+    
+    # This is a simplified update - in production, proper YAML editing would be needed
+    case "$section" in
+        expose)
+            case "$key" in
+                enabled)
+                    sed -i "/^[[:space:]]*expose:/,/^[[:space:]]*[a-zA-Z]/ s/^[[:space:]]*enabled:.*/    enabled: $value/" "$instance_file"
+                    ;;
+                *)
+                    log_warn "Unsupported expose key: $key"
+                    ;;
+            esac
+            ;;
+        *)
+            log_warn "Unsupported runtime section: $section"
+            ;;
+    esac
+    
+    # Remove backup on success
+    rm "${instance_file}.backup"
+}
+
+# List all instances for an engine
+list_instances() {
+    local engine="$1"
+    local verbose="${2:-false}"
+    
+    validate_engine_name "$engine"
+    
+    local engine_dir="${DBLAB_BASE_DIR}/${engine}"
+    
+    if [[ ! -d "$engine_dir" ]]; then
+        log_info "No instances found for engine: $engine"
+        return 0
+    fi
+    
+    log_info "Instances for $engine:"
+    log_info "====================="
+    
+    # Header
+    if [[ "$verbose" == "true" ]]; then
+        printf "  %-20s %-10s %-15s %-20s %-20s %-30s\n" \
+               "NAME" "VERSION" "STATUS" "NETWORK_MODE" "CREATED" "DATA_DIR"
+        printf "  %-20s %-10s %-15s %-20s %-20s %-30s\n" \
+               "----" "-------" "------" "------------" "-------" "--------"
+    else
+        printf "  %-20s %-10s %-15s %-20s\n" \
+               "NAME" "VERSION" "STATUS" "CREATED"
+        printf "  %-20s %-10s %-15s %-20s\n" \
+               "----" "-------" "------" "-------"
+    fi
+    
+    local instance_count=0
+    
+    # Safely iterate through instances
+    for instance_dir in "$engine_dir"/*; do
+        # Skip if no files match the pattern
+        [[ -e "$instance_dir" ]] || continue
+        
+        if [[ -d "$instance_dir" ]]; then
+            local instance_name
+            instance_name=$(basename "$instance_dir")
+            local instance_file="${instance_dir}/instance.yml"
+            
+            if [[ -f "$instance_file" ]]; then
+                # Extract basic info
+                local version status created network_mode data_dir
+                version=$(grep "^version:" "$instance_file" | cut -d: -f2 | tr -d ' "' || echo "unknown")
+                status=$(grep "^[[:space:]]*status:" "$instance_file" | cut -d: -f2 | tr -d ' "' || echo "unknown")
+                created=$(grep "^created:" "$instance_file" | cut -d: -f2 | tr -d ' "' || echo "unknown")
+                network_mode=$(grep "^[[:space:]]*mode:" "$instance_file" | cut -d: -f2 | tr -d ' "' || echo "isolated")
+                data_dir=$(grep "^[[:space:]]*data_dir:" "$instance_file" | cut -d: -f2- | tr -d ' "' || echo "unknown")
+                
+                # Truncate created timestamp for display
+                created=$(echo "$created" | cut -c1-16)
+                
+                # Get real-time container status if available
+                local real_status="$status"
+                
+                # Try to get real-time status if runner is available
+                if declare -F get_container_name >/dev/null 2>&1 && declare -F get_container_status >/dev/null 2>&1; then
+                    local container_name
+                    if container_name=$(get_container_name "$engine" "$instance_name" 2>/dev/null); then
+                        if [[ -n "$container_name" ]] && command_exists "${DBLAB_CONTAINER_RUNTIME:-docker}"; then
+                            local runtime_status
+                            if runtime_status=$(get_container_status "$container_name" 2>/dev/null); then
+                                case "$runtime_status" in
+                                    running)
+                                        real_status="running"
+                                        ;;
+                                    exited|stopped)
+                                        real_status="stopped"
+                                        ;;
+                                    not_found)
+                                        real_status="not_found"
+                                        ;;
+                                    *)
+                                        real_status="$status"
+                                        ;;
+                                esac
+                            fi
+                        fi
+                    fi
+                fi
+                
+                if [[ "$verbose" == "true" ]]; then
+                    printf "  %-20s %-10s %-15s %-20s %-20s %-30s\n" \
+                           "$instance_name" "$version" "$real_status" "$network_mode" "$created" "$data_dir"
+                else
+                    printf "  %-20s %-10s %-15s %-20s\n" \
+                           "$instance_name" "$version" "$real_status" "$created"
+                fi
+                
+                instance_count=$((instance_count + 1))
+            fi
+        fi
+    done
+    
+    echo
+    log_info "Total instances: $instance_count"
+    
+    return 0  # Explicit success return
+}
+
+# Remove instance completely
+remove_instance() {
+    local engine="$1"
+    local instance="$2"
+    local force="${3:-false}"
+    
+    if ! instance_exists "$engine" "$instance"; then
+        log_warn "Instance does not exist: $engine/$instance"
+        return 0
+    fi
+    
+    local data_dir
+    data_dir=$(get_data_dir "$engine" "$instance")
+    
+    if [[ "$force" != "true" ]]; then
+        log_warn "This will permanently delete all data for $engine/$instance"
+        log_warn "Data directory: $data_dir"
+        read -p "Are you sure? (y/N): " -r confirm
+        if [[ ! "$confirm" =~ ^[Yy] ]]; then
+            log_info "Instance removal cancelled"
+            return 0
+        fi
+    fi
+    
+    log_info "Removing instance: $engine/$instance"
+    safe_rm "$data_dir"
+    log_info "Instance removed successfully"
+}
+
+# Export functions for use by other modules
+export -f instance_exists create_instance load_instance get_instance_config
+export -f update_instance_state update_runtime_config list_instances remove_instance
+export -f get_container_name get_network_name get_instance_file
