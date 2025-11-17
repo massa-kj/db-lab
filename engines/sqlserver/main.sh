@@ -66,7 +66,7 @@ validate_sqlserver_env() {
     log_debug "SQL Server environment validation passed"
 }
 
-# Get the correct sqlcmd path basaed on SQL Server version
+# Get the correct sqlcmd path based on SQL Server version
 get_sqlcmd_path() {
     local version="$1"
 
