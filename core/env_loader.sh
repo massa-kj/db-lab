@@ -8,6 +8,7 @@ set -euo pipefail
 # Source core utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
+source "${SCRIPT_DIR}/yaml_parser.sh"
 
 # Environment loading configuration
 declare -A ENV_LAYERS=(
@@ -185,6 +186,27 @@ validate_required_env() {
     log_trace "Environment validation passed"
 }
 
+# Validate required environment variables using metadata file (enhanced version)
+validate_required_env_with_metadata() {
+    local metadata_file="$1"
+    local env_prefix="$2"
+    
+    log_trace "Validating required environment variables using metadata: $metadata_file"
+    
+    # Source validator.sh if not already loaded
+    if ! command -v validate_env_against_metadata >/dev/null 2>&1; then
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        source "${SCRIPT_DIR}/validator.sh"
+    fi
+    
+    # Use metadata-driven validation
+    if ! validate_env_against_metadata "$metadata_file" "$env_prefix"; then
+        die "Environment validation failed against metadata"
+    fi
+    
+    log_trace "Metadata-driven environment validation passed"
+}
+
 # Export resolved environment to current shell
 export_resolved_env() {
     local export_sensitive="${1:-false}"
@@ -281,5 +303,5 @@ reset_environment() {
 
 # Export functions for use by other modules
 export -f load_environment reset_environment get_env get_env_source
-export -f validate_required_env export_resolved_env show_env_resolution
+export -f validate_required_env validate_required_env_with_metadata export_resolved_env show_env_resolution
 export -f apply_cli_overrides
