@@ -13,6 +13,7 @@ source "${CORE_DIR}/env_loader.sh"
 source "${CORE_DIR}/instance_loader.sh"
 source "${CORE_DIR}/runner.sh"
 source "${CORE_DIR}/network.sh"
+source "${CORE_DIR}/validator.sh"
 
 # Engine-specific configuration
 readonly ENGINE_NAME="sqlserver"
@@ -20,47 +21,35 @@ readonly METADATA_FILE="${SQLSERVER_DIR}/metadata.yml"
 
 # Validate SQL Server-specific environment
 validate_sqlserver_env() {
-    log_debug "Validating SQL Server environment"
+    log_debug "Validating SQL Server environment using metadata"
     
-    local sa_password database
+    # Use the new metadata-driven validation for basic checks
+    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_SQLSERVER_"; then
+        die "SQL Server environment validation failed"
+    fi
+    
+    # Additional SQL Server-specific password complexity validation
+    local sa_password
     sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
-    database=$(get_env "DBLAB_SQLSERVER_DATABASE")
     
-    # Check required fields
-    if [[ -z "$sa_password" ]]; then
-        die "DBLAB_SQLSERVER_SA_PASSWORD is required"
-    fi
-    
-    if [[ -z "$database" ]]; then
-        die "DBLAB_SQLSERVER_DATABASE is required"
-    fi
-    
-    # Validate SA password complexity (SQL Server requirement)
-    if [[ ${#sa_password} -lt 8 ]]; then
-        die "SQL Server SA password must be at least 8 characters long"
-    fi
-    
-    # Check for complexity requirements
-    local has_upper=false has_lower=false has_digit=false has_special=false
-    
-    if [[ "$sa_password" =~ [A-Z] ]]; then has_upper=true; fi
-    if [[ "$sa_password" =~ [a-z] ]]; then has_lower=true; fi
-    if [[ "$sa_password" =~ [0-9] ]]; then has_digit=true; fi
-    if [[ "$sa_password" =~ [^a-zA-Z0-9] ]]; then has_special=true; fi
-    
-    local complexity_count=0
-    [[ "$has_upper" == "true" ]] && ((complexity_count=complexity_count+1))
-    [[ "$has_lower" == "true" ]] && ((complexity_count=complexity_count+1))
-    [[ "$has_digit" == "true" ]] && ((complexity_count=complexity_count+1))
-    [[ "$has_special" == "true" ]] && ((complexity_count=complexity_count+1))
-    
-    if [[ $complexity_count -lt 3 ]]; then
-        die "SQL Server SA password must contain at least 3 of: uppercase, lowercase, digits, special characters"
-    fi
-    
-    # Validate database name format
-    if [[ ! "$database" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        die "Invalid SQL Server database name: $database"
+    if [[ -n "$sa_password" ]]; then
+        # Check for additional complexity requirements beyond minimum length
+        local has_upper=false has_lower=false has_digit=false has_special=false
+        
+        if [[ "$sa_password" =~ [A-Z] ]]; then has_upper=true; fi
+        if [[ "$sa_password" =~ [a-z] ]]; then has_lower=true; fi
+        if [[ "$sa_password" =~ [0-9] ]]; then has_digit=true; fi
+        if [[ "$sa_password" =~ [^a-zA-Z0-9] ]]; then has_special=true; fi
+        
+        local complexity_count=0
+        [[ "$has_upper" == "true" ]] && ((complexity_count=complexity_count+1))
+        [[ "$has_lower" == "true" ]] && ((complexity_count=complexity_count+1))
+        [[ "$has_digit" == "true" ]] && ((complexity_count=complexity_count+1))
+        [[ "$has_special" == "true" ]] && ((complexity_count=complexity_count+1))
+        
+        if [[ $complexity_count -lt 3 ]]; then
+            die "SQL Server SA password must contain at least 3 of: uppercase, lowercase, digits, special characters"
+        fi
     fi
     
     log_debug "SQL Server environment validation passed"
@@ -222,7 +211,11 @@ sqlserver_up() {
     
     # Load environment
     load_environment "$METADATA_FILE" "${env_files[@]}"
-    validate_required_env "DBLAB_SQLSERVER_VERSION" "DBLAB_SQLSERVER_SA_PASSWORD" "DBLAB_SQLSERVER_DATABASE"
+    
+    # Validate environment against metadata requirements
+    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_SQLSERVER_"; then
+        die "Environment validation failed"
+    fi
     validate_sqlserver_env
     
     local container_name

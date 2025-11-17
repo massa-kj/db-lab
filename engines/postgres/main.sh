@@ -13,6 +13,7 @@ source "${CORE_DIR}/env_loader.sh"
 source "${CORE_DIR}/instance_loader.sh"
 source "${CORE_DIR}/runner.sh"
 source "${CORE_DIR}/network.sh"
+source "${CORE_DIR}/validator.sh"
 
 # Engine-specific configuration
 readonly ENGINE_NAME="postgres"
@@ -20,33 +21,11 @@ readonly METADATA_FILE="${POSTGRES_DIR}/metadata.yml"
 
 # Validate PostgreSQL-specific environment
 validate_postgres_env() {
-    log_debug "Validating PostgreSQL environment"
+    log_debug "Validating PostgreSQL environment using metadata"
     
-    local user password database
-    user=$(get_env "DBLAB_PG_USER")
-    password=$(get_env "DBLAB_PG_PASSWORD")
-    database=$(get_env "DBLAB_PG_DATABASE")
-    
-    # Check required fields
-    if [[ -z "$user" ]]; then
-        die "DBLAB_PG_USER is required"
-    fi
-    
-    if [[ -z "$password" ]]; then
-        die "DBLAB_PG_PASSWORD is required"
-    fi
-    
-    if [[ -z "$database" ]]; then
-        die "DBLAB_PG_DATABASE is required"
-    fi
-    
-    # Validate format (simple validation)
-    if [[ ! "$user" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        die "Invalid PostgreSQL user name: $user"
-    fi
-    
-    if [[ ! "$database" =~ ^[a-zA-Z0-9_]+$ ]]; then
-        die "Invalid PostgreSQL database name: $database"
+    # Use the new metadata-driven validation
+    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_PG_"; then
+        die "PostgreSQL environment validation failed"
     fi
     
     log_debug "PostgreSQL environment validation passed"
@@ -148,7 +127,11 @@ postgres_up() {
     
     # Load environment
     load_environment "$METADATA_FILE" "${env_files[@]}"
-    validate_required_env "DBLAB_PG_VERSION" "DBLAB_PG_USER" "DBLAB_PG_PASSWORD" "DBLAB_PG_DATABASE"
+    
+    # Validate environment against metadata requirements
+    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_PG_"; then
+        die "Environment validation failed"
+    fi
     validate_postgres_env
     
     local container_name
