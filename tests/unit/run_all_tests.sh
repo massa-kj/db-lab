@@ -126,6 +126,7 @@ main() {
         "${SCRIPT_DIR}/test_detect_engine.sh|Runtime Detection"
         "${SCRIPT_DIR}/test_runner.sh|Container Runner"
         "${SCRIPT_DIR}/test_network.sh|Network Management"
+        "${SCRIPT_DIR}/test_yaml_parser.sh|YAML Parser"
     )
     
     # Run each test suite

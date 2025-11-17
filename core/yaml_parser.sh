@@ -68,7 +68,6 @@ parse_yaml_section() {
     in_section && /^[[:space:]]+[[:alpha:]]/ {
         gsub(/^[[:space:]]+/, "")
         gsub(/[[:space:]]*:[[:space:]]*/, "=")
-        gsub(/^["\047]+|["\047]+$/, "")  # Remove leading/trailing quotes
         print $0
         next
     }
@@ -77,7 +76,7 @@ parse_yaml_section() {
     in_section && /^[[:alpha:]]/ {
         in_section = 0
     }
-    ' "$file"
+    ' "$file" | sed 's/^["\047]*//;s/["\047]*$//;s/=["\047]*/=/;s/["\047]*$//'
 }
 
 # Get single YAML value
