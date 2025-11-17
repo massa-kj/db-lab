@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-source "${ENGINE_ROOT}/${DBLAB_ENGINE}/lib.sh"
-
-( cd "${ENGINE_ROOT}/${DBLAB_ENGINE}"
-    cmd="psql \"postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}\""
-    compose -f compose.yaml --profile cli run --rm cli "$cmd"
-)
-

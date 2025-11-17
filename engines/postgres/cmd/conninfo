@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-source "${ENGINE_ROOT}/${DBLAB_ENGINE}/lib.sh"
-
-echo "postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
-
