@@ -23,20 +23,7 @@ source "${CORE_DIR}/lib.sh"
 source "${CORE_DIR}/env_loader.sh"
 source "${CORE_DIR}/detect_engine.sh"
 source "${CORE_DIR}/env_template.sh"
-
-# Safely ensure script is executable (ignore permission errors)
-ensure_executable() {
-    local script_path="$1"
-    if [[ -f "$script_path" ]]; then
-        if [[ -w "$script_path" ]]; then
-            chmod +x "$script_path" 2>/dev/null || log_debug "Cannot change permissions for $script_path (this is normal for system installations)"
-        else
-            log_debug "Script not writable, assuming correct permissions: $script_path"
-        fi
-    else
-        die "Script not found: $script_path"
-    fi
-}
+source "${CORE_DIR}/command_dispatcher.sh"
 
 # Global variables for command line parsing
 COMMAND=""
@@ -233,40 +220,13 @@ cmd_up() {
     local engine="$1"
     local instance="$2"
     
-    log_info "Starting $engine instance: $instance"
-    
-    # Get engine script and metadata paths
-    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
-    local metadata_file="${ENGINES_DIR}/${engine}/metadata.yml"
-    
-    if [[ ! -f "$engine_script" ]]; then
-        die "Engine script not found: $engine_script"
-    fi
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        die "Engine metadata not found: $metadata_file"
-    fi
-    
-    # Validate environment files if provided
-    for env_file in "${ENV_FILES[@]}"; do
-        log_debug "Validating environment file: $env_file"
-        if ! validate_env_file "$env_file" "$metadata_file"; then
-            die "Environment validation failed for: $env_file"
-        fi
-    done
-    
     # Set expose environment variables if --expose is specified
     if [[ -n "$EXPOSE_PORTS" ]]; then
-        export DBLAB_EXPOSE_ENABLED="true"
-        export DBLAB_EXPOSE_PORTS="$EXPOSE_PORTS"
-        log_debug "Port exposure enabled: $EXPOSE_PORTS"
+        export EXPOSE_PORTS
     fi
     
-    # Make sure script is executable
-    ensure_executable "$engine_script"
-    
-    # Execute engine up command
-    "$engine_script" up "$instance" "${ENV_FILES[@]}"
+    # Use the centralized dispatcher with environment validation
+    dispatch_up_command "$engine" "$instance" "${ENV_FILES[@]}"
 }
 
 # Execute down command
@@ -274,20 +234,8 @@ cmd_down() {
     local engine="$1"
     local instance="$2"
     
-    log_info "Stopping $engine instance: $instance"
-    
-    # Get engine script path
-    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
-    
-    if [[ ! -f "$engine_script" ]]; then
-        die "Engine script not found: $engine_script"
-    fi
-    
-    # Make sure script is executable
-    ensure_executable "$engine_script"
-    
-    # Execute engine down command
-    "$engine_script" down "$instance"
+    # Use the centralized dispatcher
+    dispatch_simple_command "down" "$engine" "$instance"
 }
 
 # Execute status command
@@ -295,39 +243,16 @@ cmd_status() {
     local engine="$1"
     local instance="$2"
     
-    log_info "Checking status of $engine instance: $instance"
-    
-    # Get engine script path
-    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
-    
-    if [[ ! -f "$engine_script" ]]; then
-        die "Engine script not found: $engine_script"
-    fi
-    
-    # Make sure script is executable
-    ensure_executable "$engine_script"
-    
-    # Execute engine status command
-    local status
-    status=$("$engine_script" status "$instance")
-    
-    log_info "Instance $engine/$instance status: $status"
+    # Use the centralized dispatcher
+    dispatch_simple_command "status" "$engine" "$instance"
 }
 
 # Execute list command
 cmd_list() {
     local engine="$1"
     
-    log_info "Listing $engine instances"
-    
-    # Source necessary modules for enhanced list functionality
-    source "${CORE_DIR}/instance_loader.sh"
-    source "${CORE_DIR}/runner.sh"
-    
-    # Initialize runner to get container status functions
-    init_runner 2>/dev/null || true
-    
-    list_instances "$engine" "$VERBOSE_MODE"
+    # Use the centralized dispatcher
+    dispatch_list_command "$engine" "$VERBOSE_MODE"
 }
 
 # Execute init command
@@ -335,17 +260,8 @@ cmd_init() {
     local engine="$1"
     local instance="$2"
     
-    log_info "Generating template environment file for $engine instance: $instance"
-    
-    # Get engine metadata path
-    local metadata_file="${ENGINES_DIR}/${engine}/metadata.yml"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        die "Engine metadata not found: $metadata_file"
-    fi
-    
-    # Generate template env file
-    generate_env_template "$engine" "$instance" "$metadata_file"
+    # Use the centralized dispatcher
+    dispatch_init_command "$engine" "$instance"
 }
 
 # Execute destroy command
@@ -353,20 +269,8 @@ cmd_destroy() {
     local engine="$1"
     local instance="$2"
     
-    log_info "Destroying $engine instance: $instance"
-    
-    # Get engine script path
-    local engine_script="${ENGINES_DIR}/${engine}/main.sh"
-    
-    if [[ ! -f "$engine_script" ]]; then
-        die "Engine script not found: $engine_script"
-    fi
-    
-    # Make sure script is executable
-    ensure_executable "$engine_script"
-    
-    # Execute engine destroy command
-    "$engine_script" destroy "$instance"
+    # Use the centralized dispatcher
+    dispatch_simple_command "destroy" "$engine" "$instance"
 }
 
 # Main execution function
