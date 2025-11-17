@@ -99,6 +99,7 @@ create_instance() {
     local network_name
     network_name=$(get_network_name "$engine" "$instance" "$network_mode")
     
+    # Generate image name based on engine and version
     local image
     case "$engine" in
         postgres) image="postgres:${version}" ;;

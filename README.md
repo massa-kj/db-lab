@@ -36,7 +36,7 @@ wget -O - https://example.com/install.sh | bash
 # Initialize environment file
 dblab init postgres --instance mydb
 
-# Edit mydb.env to set passwords
+# Edit generated env file
 
 # Start PostgreSQL instance
 dblab up postgres --instance mydb --env-file mydb.env
@@ -93,6 +93,7 @@ make uninstall-clean
 ## Supported Engines
 
 - PostgreSQL (`postgres`)
+- SQL Server (`sqlserver`)
 
 ## Requirements
 
