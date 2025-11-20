@@ -169,16 +169,7 @@ validate_args() {
     fi
     
     case "$COMMAND" in
-        up|down|status|destroy)
-            if [[ -z "$ENGINE" ]]; then
-                die "Engine is required for command '$COMMAND'"
-            fi
-            
-            if [[ -z "$INSTANCE" ]]; then
-                die "Instance name is required for command '$COMMAND'. Use --instance <name>"
-            fi
-            ;;
-        init)
+        up|down|status|destroy|init)
             if [[ -z "$ENGINE" ]]; then
                 die "Engine is required for command '$COMMAND'"
             fi
