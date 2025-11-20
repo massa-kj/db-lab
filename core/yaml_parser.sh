@@ -122,3 +122,142 @@ validate_yaml_file() {
 
 # Export functions
 export -f parse_yaml_array parse_yaml_section parse_yaml_value validate_yaml_file
+
+# ---------------------------------------------------------
+# New yaml_parser.sh
+# YAML to flat key=value parser without yq dependency
+# ---------------------------------------------------------
+# Features:
+# - Flattens hierarchy with dots (db.user, network.mode)
+# - Arrays in key[0], key[1] format
+# - Comment (#) removal
+# - Skip empty lines
+# - Values treated as strings (YAML types ignored)
+# - Utilities for storing in Bash associative arrays
+# ---------------------------------------------------------
+
+# Global associative array (caller should declare -gA YAML)
+# declare -gA YAML
+
+yaml_parse_file() {
+    local file="$1"
+    
+    if [[ ! -f "$file" ]]; then
+        log_error "YAML file not found: $file"
+        return 1
+    fi
+
+    local current_section=""
+    local current_subsection=""
+    
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip empty lines and comments
+        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        # Remove trailing comments
+        line="${line%%#*}"
+        # Remove trailing whitespace
+        line="${line%"${line##*[![:space:]]}"}"
+        
+        # Top-level keys (no indentation)
+        if [[ "$line" =~ ^([a-zA-Z0-9_-]+):[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            current_section="$key"
+            current_subsection=""
+            
+            if [[ -n "$value" ]]; then
+                # Remove quotes
+                value="${value#\"}"
+                value="${value%\"}"
+                value="${value#\'}"
+                value="${value%\'}"
+                YAML["$key"]="$value"
+            fi
+            
+        # Second-level keys (2 spaces indentation)
+        elif [[ "$line" =~ ^[[:space:]]{2}([a-zA-Z0-9_-]+):[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            current_subsection="$key"
+            
+            if [[ -n "$value" ]]; then
+                # Remove quotes
+                value="${value#\"}"
+                value="${value%\"}"
+                value="${value#\'}"
+                value="${value%\'}"
+                YAML["${current_section}.${key}"]="$value"
+            fi
+            
+        # Third-level keys (4 spaces indentation)
+        elif [[ "$line" =~ ^[[:space:]]{4}([a-zA-Z0-9_-]+):[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            
+            if [[ -n "$value" ]]; then
+                # Remove quotes
+                value="${value#\"}"
+                value="${value%\"}"
+                value="${value#\'}"
+                value="${value%\'}"
+                if [[ -n "$current_subsection" ]]; then
+                    YAML["${current_section}.${current_subsection}.${key}"]="$value"
+                else
+                    YAML["${current_section}.${key}"]="$value"
+                fi
+            fi
+            
+        # Array items (2 or 4 spaces + dash)
+        elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]*(.*)$ ]]; then
+            local value="${BASH_REMATCH[1]}"
+            # Remove quotes
+            value="${value#\"}"
+            value="${value%\"}"
+            value="${value#\'}"
+            value="${value%\'}"
+            
+            # Find array index
+            local array_key=""
+            if [[ -n "$current_subsection" ]]; then
+                array_key="${current_section}.${current_subsection}"
+            else
+                array_key="$current_section"
+            fi
+            
+            local idx=0
+            local check_key="${array_key}[$idx]"
+            while [[ -n "${YAML[$check_key]:-}" ]]; do
+                ((idx++))
+                check_key="${array_key}[$idx]"
+            done
+            
+            YAML["${array_key}[$idx]"]="$value"
+        fi
+        
+    done < "$file"
+}
+
+yaml_get() {
+    local key="$1"
+    local default="${2:-}"
+    if [[ -v "YAML[$key]" ]]; then
+        printf '%s' "${YAML[$key]}"
+    else
+        printf '%s' "$default"
+    fi
+}
+
+yaml_has() {
+    local key="$1"
+    [[ -v "YAML[$key]" ]]
+}
+
+yaml_dump() {
+    for k in "${!YAML[@]}"; do
+        printf '%s=%s\n' "$k" "${YAML[$k]}"
+    done
+}
+
+export -f yaml_parse_file yaml_get yaml_has yaml_dump

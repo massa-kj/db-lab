@@ -452,3 +452,32 @@ remove_instance() {
 export -f instance_exists create_instance load_instance get_instance_config
 export -f update_instance_state update_runtime_config list_instances remove_instance
 export -f get_container_name get_network_name get_instance_file
+
+# New instance loader using yaml_parser.sh
+source "${SCRIPT_DIR}/yaml_parser.sh"
+instance_load() {
+    # local file="$1"
+    local engine="$1"
+    local instance="$2"
+    
+    if ! instance_exists "$engine" "$instance"; then
+        die "Instance does not exist: $engine/$instance"
+    fi
+    
+    local instance_file
+    instance_file=$(get_instance_file "$engine" "$instance")
+    
+    log_debug "Loading instance configuration: $instance_file"
+
+    declare -gA YAML
+    yaml_parse_file "$instance_file"
+}
+
+instance_get() {
+    local key="$1"
+    local default="${2:-}"
+
+    yaml_get "$key" "$default"
+}
+
+export -f instance_load instance_get
