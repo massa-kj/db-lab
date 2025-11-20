@@ -113,10 +113,6 @@ parse_args() {
                 export DBLAB_LOG_LEVEL="debug"
                 shift
                 ;;
-            --verbose|-v)
-                VERBOSE_MODE="true"
-                shift
-                ;;
             --instance|-i)
                 if [[ $# -lt 2 ]]; then
                     die "Option $1 requires an argument"
@@ -130,6 +126,10 @@ parse_args() {
                 fi
                 ENV_FILES+=("$2")
                 shift 2
+                ;;
+            --verbose|-v)
+                VERBOSE_MODE="true"
+                shift
                 ;;
             --expose)
                 if [[ $# -lt 2 ]]; then
@@ -206,64 +206,6 @@ validate_args() {
     done
 }
 
-# Execute up command
-cmd_up() {
-    local engine="$1"
-    local instance="$2"
-    
-    # Set expose environment variables if --expose is specified
-    if [[ -n "$EXPOSE_PORTS" ]]; then
-        export EXPOSE_PORTS
-    fi
-    
-    # Use the centralized dispatcher with environment validation
-    dispatch_up_command "$engine" "$instance" "${ENV_FILES[@]}"
-}
-
-# Execute down command
-cmd_down() {
-    local engine="$1"
-    local instance="$2"
-    
-    # Use the centralized dispatcher
-    dispatch_simple_command "down" "$engine" "$instance"
-}
-
-# Execute status command
-cmd_status() {
-    local engine="$1"
-    local instance="$2"
-    
-    # Use the centralized dispatcher
-    dispatch_simple_command "status" "$engine" "$instance"
-}
-
-# Execute list command
-cmd_list() {
-    local engine="$1"
-    
-    # Use the centralized dispatcher
-    dispatch_list_command "$engine" "$VERBOSE_MODE"
-}
-
-# Execute init command
-cmd_init() {
-    local engine="$1"
-    local instance="$2"
-    
-    # Use the centralized dispatcher
-    dispatch_init_command "$engine" "$instance"
-}
-
-# Execute destroy command
-cmd_destroy() {
-    local engine="$1"
-    local instance="$2"
-    
-    # Use the centralized dispatcher
-    dispatch_simple_command "destroy" "$engine" "$instance"
-}
-
 # Main execution function
 main() {
     # Initialize logging
@@ -289,23 +231,13 @@ main() {
     
     # Execute command
     case "$COMMAND" in
-        init)
-            cmd_init "$ENGINE" "$INSTANCE"
-            ;;
-        up)
-            cmd_up "$ENGINE" "$INSTANCE"
-            ;;
-        down)
-            cmd_down "$ENGINE" "$INSTANCE"
-            ;;
-        status)
-            cmd_status "$ENGINE" "$INSTANCE"
-            ;;
-        destroy)
-            cmd_destroy "$ENGINE" "$INSTANCE"
-            ;;
-        list)
-            cmd_list "$ENGINE"
+        init|up|down|status|cli|exec|gui|diag|destroy|list)
+            dblab_dispatch_command \
+                "$COMMAND" \
+                "$ENGINE" \
+                "$INSTANCE" \
+                "${ENV_FILES[@]}" \
+                # "$@"
             ;;
         *)
             die "Internal error: Unknown command: $COMMAND"

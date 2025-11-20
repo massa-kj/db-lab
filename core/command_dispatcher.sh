@@ -7,7 +7,11 @@ set -euo pipefail
 
 # Source core utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+ENGINES_DIR="${PROJECT_DIR}/engines"
+
 source "${SCRIPT_DIR}/lib.sh"
+source "${SCRIPT_DIR}/yaml_parser.sh"
 
 # Safely ensure script is executable (ignore permission errors)
 ensure_executable() {
@@ -162,3 +166,168 @@ dispatch_simple_command() {
 # Export functions for use by other modules
 export -f dispatch_engine_command dispatch_up_command dispatch_init_command
 export -f dispatch_list_command dispatch_simple_command ensure_executable
+
+dblab_dispatch_command() {
+    local command="$1"
+    local engine="$2"
+    local instance="$3"
+    shift 3
+
+    local env_files=()
+    local args=()
+
+    # env-file is passed as ENV_FILES
+    # Finally, command-specific options are placed in $@
+    # while [[ $# -gt 0 ]]; do
+    #     case "$1" in
+    #         *.env)
+    #             env_files+=("$1")
+    #             ;;
+    #         *)
+    #             args+=("$1")
+    #             ;;
+    #     esac
+    #     shift
+    # done
+
+    # ----------------------------------------------
+    # Load metadata.yml
+    # ----------------------------------------------
+    local METADATA_FILE="$ENGINES_DIR/${engine}/metadata.yml"
+    if [ ! -f "$METADATA_FILE" ]; then
+        log_error "metadata.yml not found for engine '$engine' at: $METADATA_FILE"
+        return 1
+    fi
+
+    declare -A META=()
+    log_debug "Attempting to parse metadata file: $METADATA_FILE"
+    
+    yaml_parse_file "$METADATA_FILE"
+    # Copy YAML data to META array
+    for k in "${!YAML[@]}"; do 
+        META["$k"]="${YAML[$k]}"
+    done
+    unset YAML
+
+    log_debug "Loaded metadata for $engine"
+
+    # ----------------------------------------------
+    # Load instance.yml (if exists)
+    # ----------------------------------------------
+    local INSTANCE_FILE=""
+    # if [ -n "$instance" ]; then
+    #     INSTANCE_FILE="$(dblab_instance_path "$engine" "$instance")/instance.yml"
+    # fi
+
+    declare -A INSTANCE=()
+    if [ -f "$INSTANCE_FILE" ]; then
+        yaml_parse_file "$INSTANCE_FILE"
+        for k in "${!YAML[@]}"; do INSTANCE["$k"]="${YAML[$k]}"; done
+        unset YAML
+        log_debug "Loaded existing instance.yml"
+    else
+        log_debug "No instance.yml found, treating as first 'up'"
+    fi
+
+    # ----------------------------------------------
+    # Merge env-layer (core -> metadata -> env-file -> env -> CLI)
+    # ----------------------------------------------
+    # In env_loader.sh:
+    # - declare -A ENV
+    # - Store the final value in ENV[...]
+    # - Check required_env
+    #
+    # dblab_env_merge \
+    #     "$engine" \
+    #     "${env_files[@]}" \
+    #     "$instance" \
+    #     META \
+    #     INSTANCE
+
+    # ENV[...] is confirmed here
+
+    # ----------------------------------------------
+    # Validate fixed attributes (engine/version/network)
+    # ----------------------------------------------
+    # dblab_validate_fixed_attributes \
+    #     "$engine" \
+    #     "$instance" \
+    #     INSTANCE \
+    #     ENV
+
+    # ----------------------------------------------
+    # Prepare network
+    # ----------------------------------------------
+    # dblab_network_prepare "$engine" "$instance" ENV INSTANCE
+
+    # ----------------------------------------------
+    # Generate instance.yml on first up
+    # ----------------------------------------------
+    # if [ ! -f "$INSTANCE_FILE" ] && [ "$command" = "up" ]; then
+    #     dblab_instance_save "$engine" "$instance" ENV
+    #     log_debug "Generated instance.yml for new instance '$instance'"
+    # fi
+
+    # ----------------------------------------------
+    # Load engine module (main.sh)
+    # ----------------------------------------------
+    # local ENGINE_MAIN="$ENGINES_DIR/$engine/main.sh"
+    # if [ ! -f "$ENGINE_MAIN" ]; then
+    #     log_error "Engine module not found: $ENGINE_MAIN"
+    # fi
+    # source "$ENGINE_MAIN"
+
+    # ----------------------------------------------
+    # Dispatch by command type
+    # ----------------------------------------------
+    case "$command" in
+        init)
+            dispatch_init_command "$engine" "$instance"
+            ;;
+        up)
+            # engine_prepare "$engine" "$instance" ENV INSTANCE
+            # engine_validate "$engine" "$instance" ENV INSTANCE
+            # engine_before_up "$engine" "$instance" ENV INSTANCE
+            # engine_up "$engine" "$instance" ENV INSTANCE
+            # engine_after_up "$engine" "$instance" ENV INSTANCE
+
+            # Set expose environment variables if --expose is specified
+            if [[ -n "$EXPOSE_PORTS" ]]; then
+                export EXPOSE_PORTS
+            fi
+            
+            # Use the centralized dispatcher with environment validation
+            dispatch_up_command "$engine" "$instance" "${ENV_FILES[@]}"
+            ;;
+        down)
+            # engine_down "$engine" "$instance" ENV INSTANCE
+            dispatch_simple_command "down" "$engine" "$instance"
+            ;;
+        cli)
+            # engine_cli "$engine" "$instance" ENV INSTANCE "${args[@]}"
+            ;;
+        exec)
+            # engine_exec "$engine" "$instance" ENV INSTANCE "${args[@]}"
+            ;;
+        gui)
+            # engine_gui "$engine" "$instance" ENV INSTANCE "${args[@]}"
+            ;;
+        diag)
+            # dblab_diag "$engine" "$instance" ENV INSTANCE
+            ;;
+        destroy)
+            # dblab_destroy_instance "$engine" "$instance"
+            dispatch_simple_command "destroy" "$engine" "$instance"
+            ;;
+        status)
+            dispatch_simple_command "status" "$engine" "$instance"
+            ;;
+        list)
+            # dblab_list_instances "$engine"
+            dispatch_list_command "$engine" "$VERBOSE_MODE"
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            ;;
+    esac
+}

@@ -139,104 +139,129 @@ export -f parse_yaml_array parse_yaml_section parse_yaml_value validate_yaml_fil
 # Global associative array (caller should declare -gA YAML)
 # declare -gA YAML
 
+# Dependencies: bash 4+, simple YAML with 2-space indentation
+# Output: Flat keys stored in associative array YAML
+#   Example: version.supported[0] = "16"
+
 yaml_parse_file() {
     local file="$1"
-    
+
+    # Hold results in global associative arrays
+    declare -gA YAML=()
+    declare -gA YAML_INDEX=()  # Next index for each parent key
+
     if [[ ! -f "$file" ]]; then
-        log_error "YAML file not found: $file"
+        log_error "yaml_parse_file: YAML file not found: $file"
         return 1
     fi
 
-    local current_section=""
-    local current_subsection=""
-    
+    log_debug "Parsing YAML file: $file"
+
+    # Stack to maintain hierarchy
+    local -a context_stack=()  # Example: ["version","supported"]
+
     while IFS= read -r line || [[ -n "$line" ]]; do
-        # Skip empty lines and comments
-        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+        # Skip comment lines and empty lines first (but don't trim too early for indent analysis)
+        # Comment-only lines
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
-        
-        # Remove trailing comments
-        line="${line%%#*}"
-        # Remove trailing whitespace
-        line="${line%"${line##*[![:space:]]}"}"
-        
-        # Top-level keys (no indentation)
-        if [[ "$line" =~ ^([a-zA-Z0-9_-]+):[[:space:]]*(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            current_section="$key"
-            current_subsection=""
-            
-            if [[ -n "$value" ]]; then
-                # Remove quotes
-                value="${value#\"}"
-                value="${value%\"}"
-                value="${value#\'}"
-                value="${value%\'}"
-                YAML["$key"]="$value"
-            fi
-            
-        # Second-level keys (2 spaces indentation)
-        elif [[ "$line" =~ ^[[:space:]]{2}([a-zA-Z0-9_-]+):[[:space:]]*(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            current_subsection="$key"
-            
-            if [[ -n "$value" ]]; then
-                # Remove quotes
-                value="${value#\"}"
-                value="${value%\"}"
-                value="${value#\'}"
-                value="${value%\'}"
-                YAML["${current_section}.${key}"]="$value"
-            fi
-            
-        # Third-level keys (4 spaces indentation)
-        elif [[ "$line" =~ ^[[:space:]]{4}([a-zA-Z0-9_-]+):[[:space:]]*(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            
-            if [[ -n "$value" ]]; then
-                # Remove quotes
-                value="${value#\"}"
-                value="${value%\"}"
-                value="${value#\'}"
-                value="${value%\'}"
-                if [[ -n "$current_subsection" ]]; then
-                    YAML["${current_section}.${current_subsection}.${key}"]="$value"
-                else
-                    YAML["${current_section}.${key}"]="$value"
-                fi
-            fi
-            
-        # Array items (2 or 4 spaces + dash)
-        elif [[ "$line" =~ ^[[:space:]]*-[[:space:]]*(.*)$ ]]; then
-            local value="${BASH_REMATCH[1]}"
-            # Remove quotes
-            value="${value#\"}"
-            value="${value%\"}"
-            value="${value#\'}"
-            value="${value%\'}"
-            
-            # Find array index
-            local array_key=""
-            if [[ -n "$current_subsection" ]]; then
-                array_key="${current_section}.${current_subsection}"
-            else
-                array_key="$current_section"
-            fi
-            
-            local idx=0
-            local check_key="${array_key}[$idx]"
-            while [[ -n "${YAML[$check_key]:-}" ]]; do
-                ((idx++))
-                check_key="${array_key}[$idx]"
-            done
-            
-            YAML["${array_key}[$idx]"]="$value"
+        # Completely empty lines
+        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+
+        # Separate leading indent from rest
+        # Example: "    - \"16\"" → indent_str="    ", text="- \"16\""
+        local indent_str text
+        if [[ "$line" =~ ^([[:space:]]*)(.*)$ ]]; then
+            indent_str="${BASH_REMATCH[1]}"
+            text="${BASH_REMATCH[2]}"
+        else
+            # Unexpected but handle it
+            text="$line"
+            indent_str=""
         fi
-        
+
+        # Remove end-of-line comments (# and after) ※Not handling # in values
+        text="${text%%#*}"
+        # Remove trailing whitespace
+        text="${text%"${text##*[![:space:]]}"}"
+
+        # Recheck: skip if becomes comment-only / empty
+        [[ "$text" =~ ^[[:space:]]*$ ]] && continue
+
+        # Calculate hierarchy level from indent width (assuming 2 spaces = 1 level)
+        local indent_len=${#indent_str}
+        local level=$(( indent_len / 2 ))
+        if (( level < 0 )); then level=0; fi
+
+        # -------------------------------
+        # 1. "key: value" format
+        # -------------------------------
+        if [[ "$text" =~ ^([A-Za-z0-9_-]+):[[:space:]]*(.+)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+
+            # Remove quotes from value
+            value="${value%\"}"; value="${value#\"}"
+            value="${value%\'}"; value="${value#\'}"
+
+            # Truncate context_stack to current level and set key there
+            context_stack=( "${context_stack[@]:0:$level}" )
+            context_stack[$level]="$key"
+
+            # Generate flat key: version.default, defaults.DBLAB_PG_USER etc
+            local flat_key
+            flat_key="$(IFS=.; echo "${context_stack[*]}")"
+
+            YAML["$flat_key"]="$value"
+            log_debug "Set YAML[$flat_key]=$value"
+            continue
+        fi
+
+        # -------------------------------
+        # 2. "key:" section start only
+        # -------------------------------
+        if [[ "$text" =~ ^([A-Za-z0-9_-]+):[[:space:]]*$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+
+            context_stack=( "${context_stack[@]:0:$level}" )
+            context_stack[$level]="$key"
+            # This line has no value itself, so don't write to YAML
+            continue
+        fi
+
+        # -------------------------------
+        # 3. Array element "- value"
+        # -------------------------------
+        if [[ "$text" =~ ^-[[:space:]]*(.*)$ ]]; then
+            local value="${BASH_REMATCH[1]}"
+
+            value="${value%\"}"; value="${value#\"}"
+            value="${value%\'}"; value="${value#\'}"
+
+            # Array parent key is one level up
+            local parent_level=$(( level - 1 ))
+            if (( parent_level < 0 )); then
+                parent_level=0
+            fi
+
+            local parent_key
+            parent_key="$(IFS=.; echo "${context_stack[*]:0:$parent_level+1}")"
+
+            # Get next index from YAML_INDEX (default to 0 if not found)
+            local idx="${YAML_INDEX[$parent_key]:-0}"
+
+            # Example: "version.supported[0]" = "16"
+            YAML["${parent_key}[${idx}]"]="$value"
+            YAML_INDEX["$parent_key"]=$(( idx + 1 ))
+            log_debug "Set YAML[${parent_key}[${idx}]]=$value"
+
+            continue
+        fi
+
+        # Lines that don't match any of the above are ignored for current use (extend if needed)
+        log_debug "Skipped unrecognized line: $text"
     done < "$file"
+    
+    log_debug "YAML parsing completed. Found ${#YAML[@]} keys"
 }
 
 yaml_get() {

@@ -469,7 +469,6 @@ instance_load() {
     
     log_debug "Loading instance configuration: $instance_file"
 
-    declare -gA YAML
     yaml_parse_file "$instance_file"
 }
 
