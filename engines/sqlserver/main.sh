@@ -78,6 +78,7 @@ prepare_sqlserver_container() {
     version=$(get_env "DBLAB_SQLSERVER_VERSION")
     sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
     database=$(get_env "DBLAB_SQLSERVER_DATABASE")
+    mssql_pid=$(get_env "DBLAB_SQLSERVER_PID" "Express")
     port=$(get_env "DBLAB_SQLSERVER_PORT" "1433")
     
     local image="mcr.microsoft.com/mssql/server:${version}"
@@ -93,7 +94,7 @@ prepare_sqlserver_container() {
     # SQL Server environment variables
     add_env "ACCEPT_EULA" "Y"
     add_env "MSSQL_SA_PASSWORD" "$sa_password"
-    add_env "MSSQL_PID" "Express"  # Use Express edition for development
+    add_env "MSSQL_PID" "$mssql_pid"
     add_env "MSSQL_TCP_PORT" "$port"
     
     # Data volume mount with proper permissions
