@@ -480,3 +480,36 @@ instance_get() {
 }
 
 export -f instance_load instance_get
+
+dblab_instance_load() {
+    local engine="$1"
+    local instance="$2"
+    local out_name="$3" # Name of the output associative array
+
+    declare -n OUT="$out_name"
+
+    local file
+    file=$(get_instance_file "$engine" "$instance")
+
+    if [ ! -f "$file" ]; then
+        log_debug "No instance.yml found for $engine/$instance"
+        return 1
+    fi
+
+    log_debug "Loading instance.yml: $file"
+
+    declare -A tmp=()
+    yaml_parse_file "$file"
+
+    for k in "${!YAML[@]}"; do
+        tmp["$k"]="${YAML[$k]}"
+    done
+    unset YAML
+
+    # Copy to the calling array
+    for k in "${!tmp[@]}"; do
+        OUT["$k"]="${tmp[$k]}"
+    done
+
+    return 0
+}

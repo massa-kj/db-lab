@@ -12,6 +12,7 @@ ENGINES_DIR="${PROJECT_DIR}/engines"
 
 source "${SCRIPT_DIR}/lib.sh"
 source "${SCRIPT_DIR}/yaml_parser.sh"
+source "${SCRIPT_DIR}/instance_loader.sh"
 
 # Safely ensure script is executable (ignore permission errors)
 ensure_executable() {
@@ -178,21 +179,17 @@ dblab_dispatch_command() {
 
     # env-file is passed as ENV_FILES
     # Finally, command-specific options are placed in $@
-    # while [[ $# -gt 0 ]]; do
-    #     case "$1" in
-    #         *.env)
-    #             env_files+=("$1")
-    #             ;;
-    #         *)
-    #             args+=("$1")
-    #             ;;
-    #     esac
-    #     shift
-    # done
+    while [[ "$1" != "--" ]]; do
+        env_files+=("$1")
+        shift
+    done
+    shift # remove --
+    args=("$@")
 
     # ----------------------------------------------
     # Load metadata.yml
     # ----------------------------------------------
+    # TODO: metadata_loader.sh
     local METADATA_FILE="$ENGINES_DIR/${engine}/metadata.yml"
     if [ ! -f "$METADATA_FILE" ]; then
         log_error "metadata.yml not found for engine '$engine' at: $METADATA_FILE"
@@ -214,19 +211,15 @@ dblab_dispatch_command() {
     # ----------------------------------------------
     # Load instance.yml (if exists)
     # ----------------------------------------------
-    local INSTANCE_FILE=""
-    # if [ -n "$instance" ]; then
-    #     INSTANCE_FILE="$(dblab_instance_path "$engine" "$instance")/instance.yml"
-    # fi
-
     declare -A INSTANCE=()
-    if [ -f "$INSTANCE_FILE" ]; then
-        yaml_parse_file "$INSTANCE_FILE"
-        for k in "${!YAML[@]}"; do INSTANCE["$k"]="${YAML[$k]}"; done
-        unset YAML
-        log_debug "Loaded existing instance.yml"
+    if [ -n "$instance" ]; then
+        if dblab_instance_load "$engine" "$instance" INSTANCE; then
+            log_debug "Loaded existing instance.yml"
+        else
+            log_debug "No instance.yml found, treating as first 'up'"
+        fi
     else
-        log_debug "No instance.yml found, treating as first 'up'"
+        log_debug "No instance name specified; some commands may fail"
     fi
 
     # ----------------------------------------------
@@ -237,12 +230,12 @@ dblab_dispatch_command() {
     # - Store the final value in ENV[...]
     # - Check required_env
     #
-    # dblab_env_merge \
-    #     "$engine" \
-    #     "${env_files[@]}" \
-    #     "$instance" \
-    #     META \
-    #     INSTANCE
+    dblab_env_merge \
+        "$engine" \
+        "$instance" \
+        META \
+        INSTANCE \
+        "${env_files[@]}"
 
     # ENV[...] is confirmed here
 

@@ -305,3 +305,164 @@ reset_environment() {
 export -f load_environment reset_environment get_env get_env_source
 export -f validate_required_env validate_required_env_with_metadata export_resolved_env show_env_resolution
 export -f apply_cli_overrides
+
+# ================================================================
+# env_loader.sh
+# - Merge env-layers (5 stages) to create final configuration values ENV[...]
+# ================================================================
+# Layer structure:
+#   1. core defaults
+#   2. metadata.yml defaults
+#   3. env-file (multiple, later overrides)
+#   4. OS env (DBLAB_* namespace)
+#   5. CLI options (highest priority)
+#
+# Purpose:
+#   - Merge each layer with last-wins strategy
+#   - Check metadata.required_env
+#   - Fixed attributes in instance.yml cannot be overridden
+# ================================================================
+
+# ================================================================
+# env-loader main function
+# ================================================================
+#
+# Arguments:
+#   $1 = engine ("postgres" etc)
+#   $2 = env-file1
+#   $3 = env-file2
+#   ...
+#   last = instance name (may be empty)
+#
+#   metadata.yml is already stored in META[...] by command_dispatcher
+#   instance.yml is stored in INSTANCE[...] (if exists)
+#
+# After calling:
+#   ENV[...] contains final resolved values
+# ================================================================
+dblab_env_merge() {
+    local engine="$1"
+    local instance="$2"
+    local meta_name="$3"
+    local inst_name="$4"
+    shift 4
+
+    local env_files=("$@")
+
+    # ------------- Prepare META and INSTANCE references --------------------
+    # indirect reference to META[...] and INSTANCE[...]
+    declare -n META_REF="$meta_name"
+    declare -n INSTANCE_REF="$inst_name"
+
+    # ENV is the final constructed associative array
+    declare -gA ENV=()
+
+    # Instance name specified by CLI
+    instance_name="${INSTANCE_REF[instance]:-${DBLAB_INSTANCE:-}}"
+
+    # ---------------------------------------------------------
+    # 1. core defaults (minimal, add more if needed)
+    # ---------------------------------------------------------
+    # Example: ENV["DBLAB_LOG_LEVEL"]="info"
+    # Currently empty implementation (add in future)
+    :
+
+    # ---------------------------------------------------------
+    # 2. metadata.yml defaults
+    # ---------------------------------------------------------
+    # metadata.yml example:
+    # defaults:
+    #   DBLAB_PG_USER: postgres
+    #
+    for k in "${!META_REF[@]}"; do
+        if [[ "$k" == defaults.* ]]; then
+            key="${k#defaults.}"
+            ENV["$key"]="${META_REF[$k]}"
+        fi
+    done
+
+    # ---------------------------------------------------------
+    # 3. env-file (multiple files, later wins)
+    # ---------------------------------------------------------
+    for f in "$@"; do
+        if [[ "$f" == *.env && -f "$f" ]]; then
+            log_debug "Loading env-file: $f"
+            while IFS='=' read -r k v; do
+                [[ -z "$k" || "$k" == \#* ]] && continue
+                ENV["$k"]="$v"
+            done < "$f"
+        fi
+    done
+
+    # ---------------------------------------------------------
+    # 4. OS environment variables (DBLAB_*)
+    # ---------------------------------------------------------
+    # Example: DBLAB_PG_USER=foo → ENV["DBLAB_PG_USER"]=foo
+    for var in $(env | awk -F= '/^DBLAB_/ {print $1}'); do
+        ENV["$var"]="${!var}"
+    done
+
+    # ---------------------------------------------------------
+    # 5. CLI options (method: core dispatcher sets ENV and passes)
+    # ---------------------------------------------------------
+    # Here we assume "already reflected in ENV[...]" and do nothing
+    # ex: ENV["DBLAB_PG_VERSION"]="$CLI_VERSION"
+    :
+
+    # ============================================================
+    # Fixed attributes in instance.yml cannot be overridden
+    # ============================================================
+    # Fixed attributes:
+    #   - engine
+    #   - version
+    #   - instance
+    #   - network.mode
+    #   - network.name
+    # -------------------------------------------------------------
+    if [ -n "${INSTANCE_REF[engine]:-}" ]; then
+        # Align backing field name correspondence
+        fixed_engine="${INSTANCE_REF[engine]}"
+        fixed_version="${INSTANCE_REF[version]:-}"
+        fixed_instance="${INSTANCE_REF[instance]:-}"
+        fixed_network_mode="${INSTANCE_REF[network.mode]:-}"
+
+        # Override prohibition logic
+        if [[ -n "${ENV[DBLAB_${engine^^}_VERSION]:-}" && "${ENV[DBLAB_${engine^^}_VERSION]}" != "$fixed_version" ]]; then
+            log_error "Cannot change version for existing instance. instance.yml has version=$fixed_version"
+        fi
+
+        # Engine name change is impossible in the first place
+        if [[ -n "${ENV[DBLAB_ENGINE]:-}" && "${ENV[DBLAB_ENGINE]}" != "$fixed_engine" ]]; then
+            log_error "Cannot change engine for existing instance."
+        fi
+
+        # Instance name conflict
+        if [[ -n "$instance_name" && "$instance_name" != "$fixed_instance" ]]; then
+            log_error "CLI instance '$instance_name' does not match instance.yml '$fixed_instance'"
+        fi
+
+        # network.mode is command-specific (cannot be changed)
+        if [[ -n "${ENV[DBLAB_NETWORK_MODE]:-}" && "${ENV[DBLAB_NETWORK_MODE]}" != "$fixed_network_mode" ]]; then
+            log_error "Cannot change network.mode for existing instance."
+        fi
+
+        # Reflect instance.yml values to ENV (priority)
+        for k in "${!INSTANCE_REF[@]}"; do
+            ENV["$k"]="${INSTANCE_REF[$k]}"
+        done
+    fi
+
+    # ============================================================
+    # Check metadata.required_env
+    # ============================================================
+    for k in "${!META_REF[@]}"; do
+        if [[ "$k" == required_env.* ]]; then
+            req="${META_REF[$k]}"
+            if [[ -z "${ENV[$req]:-}" ]]; then
+                log_error "Missing required env: $req"
+            fi
+        fi
+    done
+
+    log_debug "ENV merge completed. Total keys: ${#ENV[@]}"
+}
