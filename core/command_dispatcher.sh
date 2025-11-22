@@ -11,8 +11,11 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ENGINES_DIR="${PROJECT_DIR}/engines"
 
 source "${SCRIPT_DIR}/lib.sh"
-source "${SCRIPT_DIR}/yaml_parser.sh"
+source "${SCRIPT_DIR}/metadata_loader.sh"
 source "${SCRIPT_DIR}/instance_loader.sh"
+source "${SCRIPT_DIR}/env_loader.sh"
+source "${SCRIPT_DIR}/merge_layers.sh"
+source "${SCRIPT_DIR}/validator.sh"
 
 # Safely ensure script is executable (ignore permission errors)
 ensure_executable() {
@@ -185,33 +188,49 @@ dblab_dispatch_command() {
     done
     shift # remove --
     args=("$@")
-
-    # ----------------------------------------------
-    # Load metadata.yml
-    # ----------------------------------------------
-    # TODO: metadata_loader.sh
-    local METADATA_FILE="$ENGINES_DIR/${engine}/metadata.yml"
-    if [ ! -f "$METADATA_FILE" ]; then
-        log_error "metadata.yml not found for engine '$engine' at: $METADATA_FILE"
-        return 1
-    fi
-
-    declare -A META=()
-    log_debug "Attempting to parse metadata file: $METADATA_FILE"
     
-    yaml_parse_file "$METADATA_FILE"
-    # Copy YAML data to META array
-    for k in "${!YAML[@]}"; do 
-        META["$k"]="${YAML[$k]}"
-    done
-    unset YAML
+    log_debug "Dispatching command '$command' for engine '$engine' and instance '$instance'"
 
+    # =============================================================
+    # State holders (assoc-array)
+    # =============================================================
+    declare -A META=()
+    declare -A META_DEFAULTS=()
+    declare -A INSTANCE=()
+    declare -A INSTANCE_FIXED=()
+    declare -A INSTANCE_RUNTIME=()
+    declare -A ENV_RUNTIME=()
+    declare -A CLI_RUNTIME=()
+    declare -A FINAL_CONFIG=()
+
+    # ---------------------------------------------------------
+    # Load metadata
+    # ---------------------------------------------------------
+    metadata_load "$engine" META META_DEFAULTS
     log_debug "Loaded metadata for $engine"
+
+    # ---------------------------------------------------------
+    # Merge layers
+    # ---------------------------------------------------------
+    merge_layers FINAL_CONFIG \
+        META_DEFAULTS \
+        INSTANCE_RUNTIME \
+        ENV_RUNTIME \
+        CLI_RUNTIME \
+        INSTANCE_FIXED
+    log_debug "Merged configuration layers into FINAL_CONFIG"
+
+    # ---------------------------------------------------------
+    # DI: Export final config as environment variables
+    # ---------------------------------------------------------
+    export DBLAB_CONFIG_KEYS=("${!FINAL_CONFIG[@]}")
+    for k in "${!FINAL_CONFIG[@]}"; do
+        export "$k=${FINAL_CONFIG[$k]}"
+    done
 
     # ----------------------------------------------
     # Load instance.yml (if exists)
     # ----------------------------------------------
-    declare -A INSTANCE=()
     if [ -n "$instance" ]; then
         if dblab_instance_load "$engine" "$instance" INSTANCE; then
             log_debug "Loaded existing instance.yml"
@@ -225,19 +244,7 @@ dblab_dispatch_command() {
     # ----------------------------------------------
     # Merge env-layer (core -> metadata -> env-file -> env -> CLI)
     # ----------------------------------------------
-    # In env_loader.sh:
-    # - declare -A ENV
-    # - Store the final value in ENV[...]
-    # - Check required_env
-    #
-    dblab_env_merge \
-        "$engine" \
-        "$instance" \
-        META \
-        INSTANCE \
-        "${env_files[@]}"
-
-    # ENV[...] is confirmed here
+    # deleted
 
     # ----------------------------------------------
     # Validate fixed attributes (engine/version/network)

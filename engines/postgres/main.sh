@@ -125,14 +125,6 @@ postgres_up() {
     # Initialize runner first
     init_runner
     
-    if instance_exists "$ENGINE_NAME" "$instance"; then
-        instance_load "$ENGINE_NAME" "$instance"
-        export DBLAB_PG_VERSION=$(instance_get "version")
-        export DBLAB_PG_USER=$(instance_get "db.user")
-        export DBLAB_PG_PASSWORD=$(instance_get "db.password")
-        export DBLAB_PG_DATABASE=$(instance_get "db.database")
-    fi
-
     # Load environment
     load_environment "$METADATA_FILE" "${env_files[@]}"
     

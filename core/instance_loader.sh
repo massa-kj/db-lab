@@ -469,17 +469,10 @@ instance_load() {
     
     log_debug "Loading instance configuration: $instance_file"
 
-    yaml_parse_file "$instance_file"
+    yaml_parse_file "$instance_file" INSTANCE
 }
 
-instance_get() {
-    local key="$1"
-    local default="${2:-}"
-
-    yaml_get "$key" "$default"
-}
-
-export -f instance_load instance_get
+export -f instance_load
 
 dblab_instance_load() {
     local engine="$1"
@@ -498,18 +491,18 @@ dblab_instance_load() {
 
     log_debug "Loading instance.yml: $file"
 
-    declare -A tmp=()
-    yaml_parse_file "$file"
+    # declare -A tmp=()
+    yaml_parse_file "$file" OUT
 
-    for k in "${!YAML[@]}"; do
-        tmp["$k"]="${YAML[$k]}"
-    done
-    unset YAML
+    # for k in "${!YAML[@]}"; do
+    #     tmp["$k"]="${YAML[$k]}"
+    # done
+    # unset YAML
 
     # Copy to the calling array
-    for k in "${!tmp[@]}"; do
-        OUT["$k"]="${tmp[$k]}"
-    done
+    # for k in "${!tmp[@]}"; do
+    #     OUT["$k"]="${tmp[$k]}"
+    # done
 
     return 0
 }

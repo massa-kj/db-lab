@@ -136,19 +136,16 @@ export -f parse_yaml_array parse_yaml_section parse_yaml_value validate_yaml_fil
 # - Utilities for storing in Bash associative arrays
 # ---------------------------------------------------------
 
-# Global associative array (caller should declare -gA YAML)
-# declare -gA YAML
-
 # Dependencies: bash 4+, simple YAML with 2-space indentation
-# Output: Flat keys stored in associative array YAML
+# Output: Flat keys stored in caller's associative array via nameref
 #   Example: version.supported[0] = "16"
 
 yaml_parse_file() {
     local file="$1"
+    local -n YAML_REF="$2"
 
-    # Hold results in global associative arrays
-    declare -gA YAML=()
-    declare -gA YAML_INDEX=()  # Next index for each parent key
+    # Hold results in YAML_REF (nameref to caller's associative array)
+    declare -A YAML_INDEX=()  # Next index for each parent key
 
     if [[ ! -f "$file" ]]; then
         log_error "yaml_parse_file: YAML file not found: $file"
@@ -211,8 +208,8 @@ yaml_parse_file() {
             local flat_key
             flat_key="$(IFS=.; echo "${context_stack[*]}")"
 
-            YAML["$flat_key"]="$value"
-            log_debug "Set YAML[$flat_key]=$value"
+            YAML_REF["$flat_key"]="$value"
+            log_debug "Set YAML_REF[$flat_key]=$value"
             continue
         fi
 
@@ -250,9 +247,9 @@ yaml_parse_file() {
             local idx="${YAML_INDEX[$parent_key]:-0}"
 
             # Example: "version.supported[0]" = "16"
-            YAML["${parent_key}[${idx}]"]="$value"
+            YAML_REF["${parent_key}[${idx}]"]="$value"
             YAML_INDEX["$parent_key"]=$(( idx + 1 ))
-            log_debug "Set YAML[${parent_key}[${idx}]]=$value"
+            log_debug "Set YAML_REF[${parent_key}[${idx}]]=$value"
 
             continue
         fi
@@ -261,28 +258,119 @@ yaml_parse_file() {
         log_debug "Skipped unrecognized line: $text"
     done < "$file"
     
-    log_debug "YAML parsing completed. Found ${#YAML[@]} keys"
+    log_debug "YAML parsing completed. Found ${#YAML_REF[@]} keys"
 }
 
 yaml_get() {
-    local key="$1"
-    local default="${2:-}"
-    if [[ -v "YAML[$key]" ]]; then
-        printf '%s' "${YAML[$key]}"
+    local -n yaml_ref="$1"
+    local key="$2"
+    local default="${3:-}"
+    if [[ -v "yaml_ref[$key]" ]]; then
+        printf '%s' "${yaml_ref[$key]}"
     else
         printf '%s' "$default"
     fi
 }
 
 yaml_has() {
-    local key="$1"
-    [[ -v "YAML[$key]" ]]
+    local -n yaml_ref="$1"
+    local key="$2"
+    [[ -v "yaml_ref[$key]" ]]
+}
+
+# Check if a key exists in yaml_ref (supports partial key matching)
+# For example, if yaml_ref has "cli.args[2]", then "cli" and "cli.args" are also considered as existing
+yaml_key_exists() {
+    local -n yaml_ref="$1"
+    local key="$2"
+    
+    # First check exact match
+    if [[ -v "yaml_ref[$key]" ]]; then
+        return 0
+    fi
+    
+    # Check if any key starts with the given key followed by a dot or bracket
+    # This allows "cli" to match "cli.args[2]" and "cli.args" to match "cli.args[2]"
+    local search_pattern="${key}[\.\[]"
+    
+    for existing_key in "${!yaml_ref[@]}"; do
+        if [[ "$existing_key" =~ ^${key}[\.\[] ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
 }
 
 yaml_dump() {
-    for k in "${!YAML[@]}"; do
-        printf '%s=%s\n' "$k" "${YAML[$k]}"
+    local -n yaml_ref="$1"
+    for k in "${!yaml_ref[@]}"; do
+        printf '%s=%s\n' "$k" "${yaml_ref[$k]}"
     done
 }
 
-export -f yaml_parse_file yaml_get yaml_has yaml_dump
+# Get array from YAML data as indexed array
+# Example: yaml_get_array metadata "version.supported" supported_versions
+# Result: supported_versions=("16" "15" "14" "13")
+yaml_get_array() {
+    local -n source_ref="$1"
+    local array_path="$2"
+    local -n target_array="$3"
+    
+    # Clear target array
+    target_array=()
+    
+    local i=0
+    while true; do
+        local key="${array_path}[$i]"
+        if [[ -v "source_ref[$key]" ]]; then
+            target_array+=("${source_ref[$key]}")
+            i=$((i + 1))
+        else
+            break
+        fi
+    done
+    
+    log_debug "yaml_get_array: Found ${#target_array[@]} items for '$array_path'"
+}
+
+# Get object (key-value pairs) from YAML data as associative array
+# Example: yaml_get_object metadata "generate_template.comments" comments
+# Result: comments["DBLAB_PG_VERSION"]="Image tag (ex: 16, 16-alpine)", etc.
+yaml_get_object() {
+    local -n source_ref="$1"
+    local object_path="$2"
+    local -n target_object="$3"
+    
+    # Clear target object
+    target_object=()
+    
+    local object_prefix="${object_path}."
+    local prefix_len=${#object_prefix}
+    
+    # Iterate through all keys in source_ref
+    for key in "${!source_ref[@]}"; do
+        # Check if key starts with the object prefix
+        if [[ "$key" == "$object_prefix"* ]]; then
+            # Remove object prefix to get the new key
+            local new_key="${key:$prefix_len}"
+            
+            # Skip if new_key is empty or contains dots/brackets (nested structures)
+            # This ensures we only get direct children of the object
+            if [[ -n "$new_key" && "$new_key" != *.* && "$new_key" != *[* ]]; then
+                target_object["$new_key"]="${source_ref[$key]}"
+                # Debug output only if log_debug function exists
+                if declare -F log_debug >/dev/null 2>&1; then
+                    log_debug "yaml_get_object: Set target_object[$new_key]=${source_ref[$key]}"
+                fi
+            fi
+        fi
+    done
+    
+    # Debug output only if log_debug function exists
+    if declare -F log_debug >/dev/null 2>&1; then
+        log_debug "yaml_get_object: Found ${#target_object[@]} keys for '$object_path'"
+    fi
+}
+
+export -f yaml_parse_file yaml_get yaml_has yaml_key_exists yaml_dump yaml_get_array yaml_get_object
