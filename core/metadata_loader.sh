@@ -44,7 +44,6 @@ metadata_load() {
     # ---------------------------------------------------------
     # 1. Parse entire YAML and expand into OUT_META
     # ---------------------------------------------------------
-    # yaml_get_map "$metadata_path" OUT_META
     yaml_parse_file "$metadata_path" OUT_META
 
     # Required key validation
@@ -60,7 +59,6 @@ metadata_load() {
     # ---------------------------------------------------------
     # 2. Extract defaults section
     # ---------------------------------------------------------
-    # if yaml_get_map "$metadata_path" OUT_DEFAULTS "defaults"; then
     if yaml_get_object OUT_META "defaults" OUT_DEFAULTS; then
         :
     else
@@ -70,8 +68,6 @@ metadata_load() {
     # ---------------------------------------------------------
     # 3. Get required_env (list)
     # ---------------------------------------------------------
-    # declare -gA META_REQUIRED_ENV=()
-    # yaml_get_list "$metadata_path" META_REQUIRED_ENV "required_env"
     declare -ga META_REQUIRED_ENV=()
     yaml_get_array OUT_META "required_env" META_REQUIRED_ENV
 
@@ -82,8 +78,6 @@ metadata_load() {
     # ---------------------------------------------------------
     # 4. Load version.supported (optional)
     # ---------------------------------------------------------
-    # declare -gA META_SUPPORTED_VERSIONS=()
-    # yaml_get_list "$metadata_path" META_SUPPORTED_VERSIONS "version.supported" || true
     declare -ga META_SUPPORTED_VERSIONS=()
     yaml_get_array OUT_META "version.supported" META_SUPPORTED_VERSIONS || true
 
@@ -96,12 +90,9 @@ metadata_load() {
     # ---------------------------------------------------------
     # 5. Load generate_template (for env-template)
     # ---------------------------------------------------------
-    # declare -gA META_TEMPLATE_ORDER=()
     declare -ga META_TEMPLATE_ORDER=()
     declare -gA META_TEMPLATE_COMMENTS=()
 
-    # yaml_get_list "$metadata_path" META_TEMPLATE_ORDER "generate_template.order" || true
-    # yaml_get_map  "$metadata_path" META_TEMPLATE_COMMENTS "generate_template.comments" || true
     yaml_get_array OUT_META "generate_template.order" META_TEMPLATE_ORDER || true
     yaml_get_object OUT_META "generate_template.comments" META_TEMPLATE_COMMENTS || true
 

@@ -466,3 +466,198 @@ dblab_env_merge() {
 
     log_debug "ENV merge completed. Total keys: ${#ENV[@]}"
 }
+
+# =============================================================
+# env_loader.sh
+# -------------------------------------------------------------
+# Purpose:
+#   - Load env-file (multiple files allowed, last wins)
+#   - Load OS environment variables DBLAB_* and override
+#   - Apply based on metadata.defaults
+#   - Static check of required keys based on metadata.required_env
+#   - Output env_runtime as assoc-array for later merge_layers
+#
+# Constraints:
+#   - Does not depend on instance.yml structure
+#   - Contains no engine-specific logic (doesn't know key meanings)
+#
+# Expected pre-state:
+#   - metadata_loader.sh has already loaded:
+#       * META            (assoc)        ... entire engine metadata
+#       * META_DEFAULTS   (assoc)        ... defaults section
+#       * META_REQUIRED_ENV (assoc-list) ... required_env list
+#
+# Dependencies:
+#   - lib.sh          : log_debug/log_info/log_error/log_fatal
+#   - yaml_parser.sh  : none (env internally doesn't handle YAML)
+#
+# Environment variables:
+#   - ENV_FILES : array of env-file paths (set by arg_parser)
+#
+# Public functions:
+#   - env_load <engine> <meta_assoc> <instance_fixed_assoc> <out_env_assoc>
+# =============================================================
+
+# shellcheck source=./lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+
+# -------------------------------------------------------------
+# env_load <engine> <meta_assoc> <instance_fixed_assoc> <out_env_assoc>
+# -------------------------------------------------------------
+env_load() {
+    local engine="$1"
+    local -n meta_ref="$2"          # Not used but for signature
+    local -n _INSTANCE_FIXED="$3"  # Unused per spec "doesn't depend"
+    local -n OUT_ENV="$4"       # Output: env-runtime assoc
+
+    log_debug "[env] load for engine=$engine"
+
+    # Temporary map: merge defaults + env-file + OS env
+    declare -A merged=()
+
+    # 1) Apply metadata.defaults as base
+    _env_apply_defaults merged
+
+    # 2) Apply env-file group (multiple allowed, last wins)
+    _env_apply_env_files merged
+
+    # 3) Apply OS environment variables DBLAB_* (highest priority)
+    _env_apply_os_env merged
+
+    # 4) Static check of required_env
+    # _env_check_required merged
+
+    # 5) Copy to caller's OUT_ENV
+    for k in "${!merged[@]}"; do
+        OUT_ENV["$k"]="${merged[$k]}"
+    done
+
+    log_debug "[env] merged keys: ${!OUT_ENV[*]}"
+}
+
+
+# =============================================================
+# 1) Apply metadata.defaults
+# =============================================================
+_env_apply_defaults() {
+    local -n OUT="$1"
+
+    # META_DEFAULTS is expected to be loaded by metadata_loader.sh
+    if ! declare -p META_DEFAULTS &>/dev/null; then
+        log_debug "[env] META_DEFAULTS not defined (no defaults)"
+        return
+    fi
+
+    local key
+    for key in "${!META_DEFAULTS[@]}"; do
+        OUT["$key"]="${META_DEFAULTS[$key]}"
+    done
+
+    log_debug "[env] applied metadata.defaults (${#META_DEFAULTS[@]} keys)"
+}
+
+
+# =============================================================
+# 2) Apply env-file group (last wins)
+#   - Assumes ENV_FILES array is defined by arg_parser
+#   - Supports only KEY=VALUE format (simple)
+# =============================================================
+_env_apply_env_files() {
+    local -n OUT="$1"
+
+    # If ENV_FILES is undefined, do nothing
+    if [[ "${ENV_FILES+x}" != "x" ]]; then
+        return
+    fi
+
+    local file
+    for file in "${ENV_FILES[@]}"; do
+        if [[ ! -f "$file" ]]; then
+            log_fatal "[env] env-file not found: $file"
+        fi
+
+        log_debug "[env] applying env-file: $file"
+
+        # Read line by line
+        local line key value
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip comments and empty lines
+            [[ -z "$line" ]] && continue
+            [[ "$line" =~ ^[[:space:]]*# ]] && continue
+
+            # Support only KEY=VALUE format (split = only once)
+            if [[ "$line" != *"="* ]]; then
+                continue
+            fi
+
+            key="${line%%=*}"
+            value="${line#*=}"
+
+            # Remove leading/trailing whitespace
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+
+            # Only target DBLAB_*
+            if [[ "$key" != DBLAB_* ]]; then
+                continue
+            fi
+
+            OUT["$key"]="$value"
+        done <"$file"
+    done
+}
+
+
+# =============================================================
+# 3) Apply OS environment variables DBLAB_* (highest priority)
+# =============================================================
+_env_apply_os_env() {
+    local -n OUT="$1"
+
+    local name value
+    # Enumerate with env and pick only DBLAB_*
+    while IFS='=' read -r name value; do
+        [[ "$name" != DBLAB_* ]] && continue
+        OUT["$name"]="$value"
+    done < <(env)
+
+    log_debug "[env] applied OS DBLAB_* env"
+}
+
+
+# =============================================================
+# 4) required_env check
+#   - If keys specified in metadata.required_env are not found
+#     in any of "defaults + env-file + OS env", error
+# =============================================================
+_env_check_required() {
+    local -n MERGED="$1"
+
+    # META_REQUIRED_ENV is expected to be loaded by metadata_loader.sh
+    if ! declare -p META_REQUIRED_ENV &>/dev/null; then
+        log_debug "[env] META_REQUIRED_ENV not defined (no required_env)"
+        return
+    fi
+
+    local missing=()
+    local idx key val def
+
+    for idx in "${!META_REQUIRED_ENV[@]}"; do
+        key="${META_REQUIRED_ENV[$idx]}"    # Value as list
+
+        val="${MERGED[$key]-}"
+        def="${META_DEFAULTS[$key]-}"
+
+        # OK if there's a value in defaults or merged
+        if [[ -z "${val}" && -z "${def}" ]]; then
+            missing+=("$key")
+        fi
+    done
+
+    if ((${#missing[@]} > 0)); then
+        log_error "[env] missing required env(s): ${missing[*]}"
+        log_error "       please set them via env-file or OS DBLAB_*"
+        exit 1
+    fi
+}

@@ -210,6 +210,11 @@ dblab_dispatch_command() {
     log_debug "Loaded metadata for $engine"
 
     # ---------------------------------------------------------
+    # Load environment variables
+    # ---------------------------------------------------------
+    env_load "$engine" META INSTANCE_FIXED ENV_RUNTIME
+
+    # ---------------------------------------------------------
     # Merge layers
     # ---------------------------------------------------------
     merge_layers FINAL_CONFIG \
@@ -219,6 +224,18 @@ dblab_dispatch_command() {
         CLI_RUNTIME \
         INSTANCE_FIXED
     log_debug "Merged configuration layers into FINAL_CONFIG"
+
+    # ---------------------------------------------------------
+    # Load engine module
+    # ---------------------------------------------------------
+    local engine_root="${DBLAB_ROOT:-${ENGINES_DIR}/$engine}"
+    local engine_main="$engine_root/main.sh"
+    if [[ ! -f $engine_main ]]; then
+        log_error "engine main not found: $engine_main"
+    fi
+
+    # shellcheck source=/dev/null
+    source "$engine_main"
 
     # ---------------------------------------------------------
     # DI: Export final config as environment variables
@@ -271,11 +288,7 @@ dblab_dispatch_command() {
     # ----------------------------------------------
     # Load engine module (main.sh)
     # ----------------------------------------------
-    # local ENGINE_MAIN="$ENGINES_DIR/$engine/main.sh"
-    # if [ ! -f "$ENGINE_MAIN" ]; then
-    #     log_error "Engine module not found: $ENGINE_MAIN"
-    # fi
-    # source "$ENGINE_MAIN"
+    # deleted
 
     # ----------------------------------------------
     # Dispatch by command type
