@@ -10,107 +10,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 source "${SCRIPT_DIR}/yaml_parser.sh"
 
-# Validate metadata.yml file structure and content
-validate_metadata_file() {
-    local metadata_file="$1"
-    local engine_name="$2"
-    
-    log_debug "Validating metadata file: $metadata_file for engine: $engine_name"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        log_error "Metadata file not found: $metadata_file"
-        return 1
-    fi
-    
-    # Basic YAML structure validation
-    if ! validate_yaml_file "$metadata_file"; then
-        log_error "Invalid YAML structure in metadata file: $metadata_file"
-        return 1
-    fi
-    
-    # Validate required top-level keys
-    local required_keys=("engine" "required_env" "defaults")
-    for key in "${required_keys[@]}"; do
-        if ! grep -q "^${key}:" "$metadata_file"; then
-            log_error "Missing required key '$key' in metadata file: $metadata_file"
-            return 1
-        fi
-    done
-    
-    # Validate engine name matches
-    local declared_engine
-    declared_engine=$(parse_yaml_value "$metadata_file" "engine")
-    if [[ "$declared_engine" != "$engine_name" ]]; then
-        log_error "Engine name mismatch: declared '$declared_engine', expected '$engine_name'"
-        return 1
-    fi
-    
-    # Validate engine name format
-    if ! validate_engine_name "$declared_engine"; then
-        return 1
-    fi
-    
-    # Validate required_env array exists and is not empty
-    local required_env_count
-    required_env_count=$(parse_yaml_array "$metadata_file" "required_env" | wc -l)
-    if [[ "$required_env_count" -eq 0 ]]; then
-        log_error "Empty required_env array in metadata file: $metadata_file"
-        return 1
-    fi
-    
-    # Validate version section if present
-    if grep -q "^version:" "$metadata_file"; then
-        _validate_version_section "$metadata_file"
-    fi
-    
-    # Validate validation section if present
-    if grep -q "^validation:" "$metadata_file"; then
-        _validate_validation_section "$metadata_file"
-    fi
-    
-    log_debug "Metadata file validation successful: $metadata_file"
-    return 0
-}
-
-# Validate version section in metadata.yml
-_validate_version_section() {
-    local metadata_file="$1"
-    
-    # Check for default version
-    if ! parse_yaml_section "$metadata_file" "version" | grep -q "^default="; then
-        log_warn "No default version specified in metadata file: $metadata_file"
-    fi
-    
-    # Check supported versions array if present
-    if grep -q "^[[:space:]]*supported:" "$metadata_file"; then
-        local supported_count
-        supported_count=$(parse_yaml_array "$metadata_file" "supported" | wc -l)
-        if [[ "$supported_count" -eq 0 ]]; then
-            log_warn "Empty supported versions array in metadata file: $metadata_file"
-        fi
-    fi
-}
-
-# Validate validation section in metadata.yml
-_validate_validation_section() {
-    local metadata_file="$1"
-    
-    # Parse validation rules
-    local validation_rules
-    validation_rules=$(parse_yaml_section "$metadata_file" "validation")
-    
-    # Validate regex patterns by testing them
-    while IFS='=' read -r key value; do
-        if [[ "$key" == *"_regex" ]]; then
-            # Test if regex is valid by using it in a grep test
-            if ! echo "test" | grep -E "$value" >/dev/null 2>&1 && ! echo "test" | grep -v -E "$value" >/dev/null 2>&1; then
-                log_error "Invalid regex pattern for $key: $value"
-                return 1
-            fi
-        fi
-    done <<< "$validation_rules"
-}
-
 # Validate environment variables against metadata requirements
 validate_env_against_metadata() {
     local metadata_file="$1"
@@ -240,133 +139,224 @@ _apply_validation_rules() {
     [[ "$validation_failed" != "true" ]]
 }
 
-# Validate supported version against metadata
-validate_version_support() {
-    local metadata_file="$1"
-    local version="$2"
-    
-    log_debug "Validating version support: $version against $metadata_file"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        log_error "Metadata file not found: $metadata_file"
-        return 1
-    fi
-    
-    # If no supported versions are specified, allow any version
-    if ! grep -q "^[[:space:]]*supported:" "$metadata_file"; then
-        log_debug "No version restrictions in metadata, allowing version: $version"
-        return 0
-    fi
-    
-    # Check if version is in supported list
-    local supported_versions
-    supported_versions=$(parse_yaml_array "$metadata_file" "supported")
-    
-    if echo "$supported_versions" | grep -qx "$version"; then
-        log_debug "Version $version is supported"
-        return 0
-    else
-        log_error "Unsupported version: $version. Supported versions: $(echo "$supported_versions" | tr '\n' ' ')"
-        return 1
-    fi
-}
-
-# Get default values from metadata
-get_metadata_defaults() {
-    local metadata_file="$1"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        log_error "Metadata file not found: $metadata_file"
-        return 1
-    fi
-    
-    # Return defaults section as key=value pairs
-    parse_yaml_section "$metadata_file" "defaults"
-}
-
-# Get required environment variables from metadata
-get_required_env_vars() {
-    local metadata_file="$1"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        log_error "Metadata file not found: $metadata_file"
-        return 1
-    fi
-    
-    # Return required_env array as newline-separated list
-    parse_yaml_array "$metadata_file" "required_env"
-}
-
-# Validate engine directory structure
-validate_engine_structure() {
-    local engine_dir="$1"
-    local engine_name="$2"
-    
-    log_debug "Validating engine structure: $engine_dir"
-    
-    if [[ ! -d "$engine_dir" ]]; then
-        log_error "Engine directory not found: $engine_dir"
-        return 1
-    fi
-    
-    # Check for required files
-    local required_files=("metadata.yml" "main.sh")
-    for file in "${required_files[@]}"; do
-        if [[ ! -f "$engine_dir/$file" ]]; then
-            log_error "Required file missing in engine directory: $file"
-            return 1
-        fi
-    done
-    
-    # Validate metadata file
-    if ! validate_metadata_file "$engine_dir/metadata.yml" "$engine_name"; then
-        return 1
-    fi
-    
-    # Check for optional files and warn if missing
-    local optional_files=("exec.sh" "cli.sh" "gui.sh" "health.sh")
-    for file in "${optional_files[@]}"; do
-        if [[ ! -f "$engine_dir/$file" ]]; then
-            log_debug "Optional file missing in engine directory: $file"
-        fi
-    done
-    
-    log_debug "Engine structure validation successful: $engine_dir"
-    return 0
-}
-
-# Comprehensive validation for engine setup
-validate_engine_configuration() {
-    local engine_name="$1"
-    local engines_dir="${2:-engines}"
-    local env_prefix="$3"  # e.g., "DBLAB_PG_"
-    
-    log_info "Validating engine configuration: $engine_name"
-    
-    local engine_dir="$engines_dir/$engine_name"
-    
-    # Validate engine name format
-    if ! validate_engine_name "$engine_name"; then
-        return 1
-    fi
-    
-    # Validate engine directory structure
-    if ! validate_engine_structure "$engine_dir" "$engine_name"; then
-        return 1
-    fi
-    
-    # Validate environment against metadata (if env_prefix provided)
-    if [[ -n "${env_prefix:-}" ]]; then
-        if ! validate_env_against_metadata "$engine_dir/metadata.yml" "$env_prefix"; then
-            return 1
-        fi
-    fi
-    
-    log_info "Engine configuration validation successful: $engine_name"
-    return 0
-}
-
 # Export functions for use by other modules
-export -f validate_metadata_file validate_env_against_metadata validate_version_support
-export -f get_metadata_defaults get_required_env_vars validate_engine_structure
-export -f validate_engine_configuration
+export -f validate_env_against_metadata
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# =============================================================
+# validator.sh
+# -------------------------------------------------------------
+# Specialized for semantic validation.
+# Loader does syntax/existence checks, validator does semantic checks.
+#
+# Adopts highly extensible "rule-based validator".
+#
+# Public functions:
+#   validator_check <engine> <verb> <final_assoc> <fixed_assoc>
+#
+# final_assoc : merge_layers result (final config)
+# fixed_assoc : instance.yml fixed attributes (immutable)
+#
+# =============================================================
+
+# shellcheck source=./lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+
+# =============================================================
+# Internal: validation rule registration (array)
+# =============================================================
+declare -a VALIDATOR_RULES=()
+
+# register function names
+validator_register_rule() {
+    VALIDATOR_RULES+=("$1")
+}
+
+# =============================================================
+# Public: execute all validation
+# =============================================================
+validator_check() {
+    local engine="$1"
+    local verb="$2"
+    local -n FINAL_CONFIG_REF="$3"
+    local -n INSTANCE_FIXED_REF="$4"
+
+    log_debug "[validator] start for engine=$engine verb=$verb"
+
+    local rule
+    for rule in "${VALIDATOR_RULES[@]}"; do
+        # call rule function
+        "$rule" "$engine" "$verb" FINAL_CONFIG_REF INSTANCE_FIXED_REF
+    done
+
+    log_debug "[validator] all checks passed"
+}
+
+
+# =============================================================
+# ▼▼▼ Rule Definitions (modularized into small functions for easy addition/extension) ▼▼▼
+# =============================================================
+
+
+# -------------------------------------------------------------
+# 1. Required fixed attributes existence check (structure guaranteed by loader, semantics here)
+# -------------------------------------------------------------
+_validate_fixed_required() {
+    local engine="$1"
+    local verb="$2"
+    local -n FINAL="$3"
+    local -n FIXED="$4"
+
+    local req_keys=(engine instance version network.mode network.name)
+    local key
+
+    for key in "${req_keys[@]}"; do
+        if [[ -z "${FIXED[$key]:-}" ]]; then
+            log_error "[validator] missing fixed key: $key"
+        fi
+    done
+}
+# validator_register_rule "_validate_fixed_required"
+
+# -------------------------------------------------------------
+# 2. version.supported (check if defined in metadata)
+# -------------------------------------------------------------
+_validate_version_supported() {
+    local engine="$1"
+    local verb="$2"
+    local -n FINAL="$3"
+    local -n FIXED="$4"
+
+    # metadata_loader が global に展開している想定
+    if ! declare -p META_SUPPORTED_VERSIONS &>/dev/null; then
+        return 0
+    fi
+
+    local ver="${FIXED[version]:-}"
+    [[ -z "$ver" ]] && return 0   # May be empty before first up
+
+    # No check needed if supported is empty
+    if ((${#META_SUPPORTED_VERSIONS[@]} == 0)); then
+        return 0
+    fi
+
+    local ok=""
+    local idx
+    for idx in "${!META_SUPPORTED_VERSIONS[@]}"; do
+        if [[ "${META_SUPPORTED_VERSIONS[$idx]}" == "$ver" ]]; then
+            ok=1
+            break
+        fi
+    done
+
+    if [[ -z "$ok" ]]; then
+        log_error "[validator] version '$ver' is not supported for engine '$engine'"
+    fi
+}
+validator_register_rule "_validate_version_supported"
+
+
+# -------------------------------------------------------------
+# 3. expose × ephemeral contradiction check
+# -------------------------------------------------------------
+_validate_expose_and_ephemeral() {
+    local engine="$1"
+    local verb="$2"
+    local -n FINAL="$3"
+
+    local ep="${FINAL[DBLAB_EPHEMERAL]:-false}"
+    local expose_enabled="${FINAL[runtime.expose.enabled]:-false}"
+
+    if [[ "$expose_enabled" == "true" && "$ep" == "true" ]]; then
+        log_error "[validator] cannot expose ports in ephemeral mode"
+    fi
+}
+validator_register_rule "_validate_expose_and_ephemeral"
+
+
+# -------------------------------------------------------------
+# 4. Port range check (port on env/runtime side)
+# -------------------------------------------------------------
+_validate_port_range() {
+    local engine="$1"
+    local verb="$2"
+    local -n FINAL="$3"
+
+    local port="${FINAL[db.port]:-}"
+    if [[ -z "$port" ]]; then return 0; fi
+
+    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
+        log_error "[validator] invalid port (non-number): $port"
+    fi
+
+    if ((port < 1 || port > 65535)); then
+        log_error "[validator] port out of range (1-65535): $port"
+    fi
+}
+validator_register_rule "_validate_port_range"
+
+
+# -------------------------------------------------------------
+# 5. Expose port list format check (simple)
+#    Format: "15432:5432"
+# -------------------------------------------------------------
+_validate_expose_ports_format() {
+    local engine="$1"
+    local verb="$2"
+    local -n FINAL="$3"
+
+    local ports="${FINAL[runtime.expose.ports]:-}"
+
+    [[ -z "$ports" || "$ports" == "[]" ]] && return 0
+
+    # ports are assumed to be comma-separated or single string for simple processing
+    local p
+    IFS=',' read -ra arr <<<"$ports"
+    for p in "${arr[@]}"; do
+        if ! [[ "$p" =~ ^[0-9]+:[0-9]+$ ]]; then
+            log_error "[validator] invalid expose port mapping: '$p'"
+        fi
+    done
+}
+validator_register_rule "_validate_expose_ports_format"
+
+
+# -------------------------------------------------------------
+# 6. Check if instance exists during down (determined by fixed keys)
+# -------------------------------------------------------------
+_validate_down_requires_instance() {
+    local engine="$1"
+    local verb="$2"
+    local -n FIXED="$4"
+
+    if [[ "$verb" == "down" ]]; then
+        if [[ -z "${FIXED[engine]:-}" || -z "${FIXED[instance]:-}" ]]; then
+            log_error "[validator] cannot down: instance does not exist"
+        fi
+    fi
+}
+validator_register_rule "_validate_down_requires_instance"
+
+
+# -------------------------------------------------------------
+# 7. network.mode validity check
+# -------------------------------------------------------------
+_validate_network_mode() {
+    local engine="$1"
+    local verb="$2"
+    local -n FIXED="$4"
+
+    local mode="${FIXED[network.mode]:-}"
+
+    case "$mode" in
+        isolated|engine-shared)
+            return 0 ;;
+        *)
+            log_error "[validator] invalid network.mode: $mode"
+            ;;
+    esac
+}
+validator_register_rule "_validate_network_mode"
