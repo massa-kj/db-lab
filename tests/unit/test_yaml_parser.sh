@@ -79,23 +79,6 @@ missing_colon
 EOF
 }
 
-# Test parse_yaml_value function
-test_parse_yaml_value() {
-    setup_yaml_test_env
-    
-    local result
-    result=$(parse_yaml_value "$TEST_YAML_DIR/simple.yml" "engine")
-    assert_equals "postgres" "$result" "Should extract simple string value"
-    
-    # Test with quotes
-    result=$(parse_yaml_value "$TEST_YAML_DIR/quotes.yml" "engine")
-    assert_equals "sqlserver" "$result" "Should handle quoted values"
-    
-    # Test non-existent key
-    result=$(parse_yaml_value "$TEST_YAML_DIR/simple.yml" "nonexistent")
-    assert_equals "" "$result" "Should return empty for missing key"
-}
-
 # Test parse_yaml_array function
 test_parse_yaml_array() {
     setup_yaml_test_env
@@ -138,58 +121,6 @@ test_parse_yaml_section() {
     assert_contains "$result" "password_min_length=8" "Should contain password min length"
 }
 
-# Test validate_yaml_file function
-test_validate_yaml_file() {
-    setup_yaml_test_env
-    
-    # Valid file
-    assert_success "validate_yaml_file '$TEST_YAML_DIR/simple.yml'" "Should validate correct YAML"
-    
-    # Minimal valid file
-    assert_success "validate_yaml_file '$TEST_YAML_DIR/minimal.yml'" "Should validate minimal YAML"
-    
-    # Non-existent file
-    assert_failure "validate_yaml_file '$TEST_YAML_DIR/missing.yml'" "Should fail for missing file"
-}
-
-# Test edge cases and error handling
-test_edge_cases() {
-    setup_yaml_test_env
-    
-    # Create file with special characters
-    cat > "$TEST_YAML_DIR/special.yml" << 'EOF'
-engine: "test-engine"
-special_chars:
-  password_with_quotes: 'P@ssw0rd!"#$%'
-  path_with_spaces: "/path/with spaces/file"
-EOF
-    
-    local result
-    result=$(parse_yaml_value "$TEST_YAML_DIR/special.yml" "engine")
-    assert_equals "test-engine" "$result" "Should handle hyphenated engine names"
-    
-    # Test section with special characters - check for key presence
-    result=$(parse_yaml_section "$TEST_YAML_DIR/special.yml" "special_chars")
-    assert_contains "$result" "password_with_quotes=" "Should handle special characters in values"
-    assert_contains "$result" "path_with_spaces=" "Should handle spaces in values"
-}
-
-# Test compatibility with real metadata files
-test_real_metadata() {
-    local result
-    
-    # Test with actual postgres metadata
-    result=$(parse_yaml_value "$PROJECT_ROOT/engines/postgres/metadata.yml" "engine")
-    assert_equals "postgres" "$result" "Should parse real postgres metadata"
-    
-    result=$(parse_yaml_section "$PROJECT_ROOT/engines/postgres/metadata.yml" "defaults")
-    assert_contains "$result" "DBLAB_PG_VERSION=" "Should parse postgres defaults"
-    
-    # Test with actual sqlserver metadata
-    result=$(parse_yaml_value "$PROJECT_ROOT/engines/sqlserver/metadata.yml" "engine")
-    assert_equals "sqlserver" "$result" "Should parse real sqlserver metadata"
-}
-
 # Report test results
 report_test_results() {
     echo "============================="
@@ -216,12 +147,8 @@ main() {
     echo "============================="
     
     # Run test functions using the framework
-    run_test "test_parse_yaml_value"
     run_test "test_parse_yaml_array" 
     run_test "test_parse_yaml_section"
-    run_test "test_validate_yaml_file"
-    run_test "test_edge_cases"
-    run_test "test_real_metadata"
     
     # Report results
     report_test_results

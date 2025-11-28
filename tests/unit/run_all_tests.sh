@@ -123,6 +123,7 @@ main() {
         "${SCRIPT_DIR}/test_lib.sh|Core Utilities (lib.sh)"
         "${SCRIPT_DIR}/test_env_loader.sh|Environment Loader"
         "${SCRIPT_DIR}/test_instance_loader.sh|Instance Management"
+        "${SCRIPT_DIR}/test_instance_writer.sh|Instance Writer"
         "${SCRIPT_DIR}/test_detect_engine.sh|Runtime Detection"
         "${SCRIPT_DIR}/test_runner.sh|Container Runner"
         "${SCRIPT_DIR}/test_network.sh|Network Management"
