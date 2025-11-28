@@ -23,6 +23,11 @@ defaults:
   DBLAB_EPHEMERAL: false
   DBLAB_NETWORK_MODE: "isolated"
   DBLAB_EXPOSE_ENABLED: false
+  # DBLAB_NETWORK_NAME: "dblab_{instance}_isolated"
+  DBLAB_STORAGE_DATA_DIR: "{XDG_DATA_HOME}/dblab/postgres/{instance}/data"
+  DBLAB_STORAGE_CONFIG_DIR: "{XDG_DATA_HOME}/dblab/postgres/{instance}/config"
+  DBLAB_STORAGE_LOG_DIR: "{XDG_DATA_HOME}/dblab/postgres/{instance}/logs"
+  DBLAB_PG_IMAGE: "postgres:{db.version}"
 
 validation:
   user_regex: "^[a-zA-Z0-9_]+$"
@@ -41,6 +46,50 @@ generate_template:
     - DBLAB_PG_PASSWORD
     - DBLAB_PG_DATABASE
     - DBLAB_EPHEMERAL
+instance_fields:
+  db.user:
+    required: true
+  db.password:
+    required: true
+  db.database:
+    required: true
+  db.port:
+    required: true
+env_map:
+  DBLAB_PG_USER: db.user
+  DBLAB_PG_VERSION: db.version
+  DBLAB_PG_DATABASE: db.database
+  DBLAB_PG_PORT: db.port
+  DBLAB_PG_PASSWORD: db.password
+  # DBLAB_NETWORK_NAME: network.name
+  DBLAB_STORAGE_DATA_DIR: storage.data_dir
+  DBLAB_STORAGE_CONFIG_DIR: storage.config_dir
+  DBLAB_STORAGE_LOG_DIR: storage.log_dir
+  DBLAB_PG_IMAGE: image
+
+  DBLAB_NETWORK_MODE: network.mode
+  DBLAB_EXPOSE_ENABLED: runtime.expose.enabled
+  DBLAB_EPHEMERAL: storage.persistent
+defaults_map:
+  DBLAB_PG_USER: db.user
+  DBLAB_PG_VERSION: db.version
+  DBLAB_PG_DATABASE: db.database
+  DBLAB_PG_PORT: db.port
+  DBLAB_PG_PASSWORD: db.password
+  # DBLAB_NETWORK_NAME: network.name
+  DBLAB_STORAGE_DATA_DIR: storage.data_dir
+  DBLAB_STORAGE_CONFIG_DIR: storage.config_dir
+  DBLAB_STORAGE_LOG_DIR: storage.log_dir
+  DBLAB_PG_IMAGE: image
+
+  DBLAB_NETWORK_MODE: network.mode
+  DBLAB_EXPOSE_ENABLED: runtime.expose.enabled
+  DBLAB_EPHEMERAL: storage.persistent
+cli_map:
+  --user: db.user
+  --password: db.password
+  --database: db.database
+  --port: db.port
 
 cli:
   image: "postgres:{{version}}"
