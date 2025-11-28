@@ -116,26 +116,18 @@ wait_for_postgres() {
 }
 
 # Start PostgreSQL instance
-postgres_up() {
-    local instance="$1"
-    local env_files=("${@:2}")
+engine_up() {
+    local -n C="$1"
     
     log_info "Starting PostgreSQL instance: $instance"
     
     # Initialize runner first
     init_runner
     
-    # Load environment
-    load_environment "$METADATA_FILE" "${env_files[@]}"
-    
-    # Validate environment against metadata requirements
-    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_PG_"; then
-        die "Environment validation failed"
-    fi
-    validate_postgres_env
-    
+    local engine="${C[engine]}"
+    local instance="${C[instance]}"
     local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
+    container_name=$(get_container_name "$engine" "$instance")
     
     # Check if container is already running
     if container_running "$container_name"; then
@@ -144,39 +136,39 @@ postgres_up() {
     fi
     
     # Check if instance exists
-    local instance_exists=false
-    if instance_exists "$ENGINE_NAME" "$instance"; then
-        log_debug "Loading existing instance: $instance"
-        load_instance "$ENGINE_NAME" "$instance"
-        instance_exists=true
-    else
-        log_debug "Creating new instance: $instance"
+    # local instance_exists=false
+    # if instance_exists "$ENGINE_NAME" "$instance"; then
+    #     log_debug "Loading existing instance: $instance"
+    #     load_instance "$ENGINE_NAME" "$instance"
+    #     instance_exists=true
+    # else
+    #     log_debug "Creating new instance: $instance"
         
-        # Create new instance
-        local version user password database network_mode ephemeral
-        version=$(get_env "DBLAB_PG_VERSION")
-        user=$(get_env "DBLAB_PG_USER")
-        password=$(get_env "DBLAB_PG_PASSWORD")
-        database=$(get_env "DBLAB_PG_DATABASE")
-        network_mode=$(get_env "DBLAB_NETWORK_MODE" "isolated")
-        ephemeral=$(get_env "DBLAB_EPHEMERAL" "false")
+    #     # Create new instance
+    #     local version user password database network_mode ephemeral
+    #     version=$(get_env "DBLAB_PG_VERSION")
+    #     user=$(get_env "DBLAB_PG_USER")
+    #     password=$(get_env "DBLAB_PG_PASSWORD")
+    #     database=$(get_env "DBLAB_PG_DATABASE")
+    #     network_mode=$(get_env "DBLAB_NETWORK_MODE" "isolated")
+    #     ephemeral=$(get_env "DBLAB_EPHEMERAL" "false")
         
-        create_instance "$ENGINE_NAME" "$instance" "$version" "$user" "$password" "$database" "$network_mode" "$ephemeral"
-        load_instance "$ENGINE_NAME" "$instance"
-    fi
+    #     create_instance "$ENGINE_NAME" "$instance" "$version" "$user" "$password" "$database" "$network_mode" "$ephemeral"
+    #     load_instance "$ENGINE_NAME" "$instance"
+    # fi
     
     # Get instance configuration
-    local data_dir network_name image
-    data_dir=$(get_instance_config "data_dir")
-    network_name=$(get_instance_config "name" "")  # network name from instance config
+    local data_dir network_name version image
+    data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/postgres/${instance}/data}"
+    network_name="${C[network.name]:-}"
     if [[ -z "$network_name" ]]; then
         # Fallback: generate network name from instance info
         local network_mode
-        network_mode=$(get_instance_config "mode" "isolated")
-        network_name=$(get_network_name "$ENGINE_NAME" "$instance" "$network_mode")
+        network_mode="${C[network.mode]:-isolated}"
+        network_name=$(get_network_name "$engine" "$instance" "$network_mode")
     fi
-    image=$(get_instance_config "image")
-    
+    image="${C[image]}"
+
     # Ensure directories exist
     ensure_dir "$data_dir"
     
@@ -192,11 +184,38 @@ postgres_up() {
         remove_container "$container_name"
     fi
     
-    # Prepare and run container
-    prepare_postgres_container "$instance" "$network_name" "$data_dir"
-    
     log_info "Starting PostgreSQL container: $container_name"
-    run_container
+    
+    # Build command arguments
+    local run_args=(
+        "--name" "${container_name}"
+        "--network" "${network_name}"
+        "-d"
+        "-e" "POSTGRES_USER=${C[db.user]}"
+        "-e" "POSTGRES_PASSWORD=${C[db.password]}"
+        "-e" "POSTGRES_DB=${C[db.database]}"
+        "-v" "${C[storage.data_dir]}:/var/lib/postgresql/data"
+    )
+
+    # Expose port if specified
+    local expose_enabled
+    expose_enabled="${C[runtime.expose.enabled]:-false}"
+    if [[ "$expose_enabled" == "true" ]]; then
+        local expose_ports
+        expose_ports="${C[runtime.expose.ports]:-}"
+
+        if [[ -n "$expose_ports" ]]; then
+            # If port is specified without host port (e.g., "5432"), 
+            # map it to the same host port (e.g., "5432:5432")
+            if [[ "$expose_ports" =~ ^[0-9]+$ ]]; then
+                expose_ports="${expose_ports}:${expose_ports}"
+                log_debug "Expanded port mapping to: $expose_ports"
+            fi
+            run_args+=("-p" "$expose_ports")
+        fi
+    fi
+
+    runner_run "${image}" "${run_args[@]}"
     
     # Wait for PostgreSQL to be ready
     if ! wait_for_postgres "$container_name"; then
@@ -214,24 +233,25 @@ postgres_up() {
     fi
     
     # Update instance state
-    update_instance_state "$ENGINE_NAME" "$instance" "last_up" ""
-    update_instance_state "$ENGINE_NAME" "$instance" "status" "running"
+    update_state_up "$engine" "$instance"
     
     log_info "PostgreSQL instance '$instance' started successfully"
     
     # Show connection information
-    local port
-    port=$(get_instance_config "port")
     log_info "Connection details:"
     log_info "  Host: $container_name (in network: $network_name)"
-    log_info "  Port: $port"
-    log_info "  Database: $(get_instance_config "database")"
-    log_info "  User: $(get_instance_config "user")"
+    log_info "  Port: ${C[db.port]}"
+    log_info "  Database: ${C[db.database]}"
+    log_info "  User: ${C[db.user]}"
 }
 
 # Stop PostgreSQL instance
-postgres_down() {
-    local instance="$1"
+engine_down() {
+    local -n C="$1"
+    # local instance="$1"
+
+    local engine="${C[engine]}"
+    local instance="${C[instance]}"
     
     log_info "Stopping PostgreSQL instance: $instance"
     
@@ -239,8 +259,8 @@ postgres_down() {
     init_runner
     
     local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
-    
+    container_name=$(get_container_name "$engine" "$instance")
+
     # Check if container is running
     if ! container_running "$container_name"; then
         log_info "Container is not running: $container_name"
@@ -255,9 +275,8 @@ postgres_down() {
     remove_container "$container_name"
     
     # Update instance state if instance exists
-    if instance_exists "$ENGINE_NAME" "$instance"; then
-        update_instance_state "$ENGINE_NAME" "$instance" "last_down" ""
-        update_instance_state "$ENGINE_NAME" "$instance" "status" "stopped"
+    if instance_exists "$engine" "$instance"; then
+        update_state_down "$engine" "$instance"
     fi
     
     log_info "PostgreSQL instance '$instance' stopped successfully"
@@ -429,8 +448,8 @@ main() {
 }
 
 # Export functions for testing
-export -f validate_postgres_env prepare_postgres_container wait_for_postgres
-export -f postgres_up postgres_down postgres_status postgres_destroy
+# export -f validate_postgres_env prepare_postgres_container wait_for_postgres
+# export -f postgres_up postgres_down postgres_status postgres_destroy
 
 # Run main function if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
