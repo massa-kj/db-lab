@@ -10,223 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 source "${SCRIPT_DIR}/yaml_parser.sh"
 
-# Environment loading configuration
-declare -A ENV_LAYERS=(
-    [core]=1
-    [metadata]=2
-    [env_files]=3
-    [environment]=4
-    [cli]=5
-)
-
+# **duplicate**
 # Temporary storage for resolved environment
 declare -A RESOLVED_ENV=()
-declare -A ENV_SOURCES=()  # Track where each value came from
-
-# Core default values (layer 1)
-set_core_defaults() {
-    log_trace "Setting core default values"
-    
-    # Global defaults
-    RESOLVED_ENV[DBLAB_LOG_LEVEL]="${DBLAB_LOG_LEVEL:-info}"
-    RESOLVED_ENV[DBLAB_BASE_DIR]="${DBLAB_BASE_DIR:-${HOME}/.local/share/dblab}"
-    RESOLVED_ENV[DBLAB_EPHEMERAL]="${DBLAB_EPHEMERAL:-false}"
-    
-    # Mark sources
-    ENV_SOURCES[DBLAB_LOG_LEVEL]="core"
-    ENV_SOURCES[DBLAB_BASE_DIR]="core"
-    ENV_SOURCES[DBLAB_EPHEMERAL]="core"
-    
-    log_trace "Core defaults set"
-}
-
-# Load engine metadata defaults (layer 2)
-load_metadata_defaults() {
-    local metadata_file="$1"
-    
-    log_trace "Attempting to load metadata from: $metadata_file"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        log_warn "Metadata file not found: $metadata_file"
-        return 0
-    fi
-    
-    log_trace "Loading metadata defaults from: $metadata_file"
-    
-    # Simple YAML parsing for defaults section
-    local in_defaults=false
-    while IFS= read -r line; do
-        # Remove leading whitespace
-        line=$(echo "$line" | sed 's/^[[:space:]]*//')
-        
-        # Check if we're in defaults section
-        if [[ "$line" == "defaults:" ]]; then
-            in_defaults=true
-            continue
-        fi
-        
-        # End of defaults section
-        if [[ "$line" =~ ^[a-zA-Z] && "$line" != "defaults:" ]]; then
-            in_defaults=false
-        fi
-        
-        # Parse key-value pairs in defaults section
-        if [[ "$in_defaults" == true && "$line" =~ ^([A-Z_]+):[[:space:]]*(.+)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            
-            # Remove quotes if present
-            value=$(echo "$value" | sed 's/^"//;s/"$//')
-            
-            log_trace "Setting metadata default: $key=$value"
-            RESOLVED_ENV[$key]="$value"
-            ENV_SOURCES[$key]="metadata"
-        fi
-    done < "$metadata_file"
-    
-    log_trace "Metadata defaults loaded"
-}
-
-# Load environment files (layer 3)
-load_env_files() {
-    local env_files=("$@")
-    
-    for env_file in "${env_files[@]}"; do
-        if [[ ! -f "$env_file" ]]; then
-            log_warn "Environment file not found: $env_file"
-            continue
-        fi
-        
-        log_trace "Loading environment file: $env_file"
-        
-        while IFS= read -r line; do
-            # Skip empty lines and comments
-            if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
-                continue
-            fi
-            
-            # Parse KEY=VALUE format
-            if [[ "$line" =~ ^([A-Z_]+)=(.*)$ ]]; then
-                local key="${BASH_REMATCH[1]}"
-                local value="${BASH_REMATCH[2]}"
-                
-                # Remove quotes if present
-                value=$(echo "$value" | sed 's/^"//;s/"$//;s/^'\''//;s/'\''$//')
-                
-                log_trace "Setting env file value: $key=$(mask_sensitive "$value")"
-                RESOLVED_ENV[$key]="$value"
-                ENV_SOURCES[$key]="env_file:$env_file"
-            fi
-        done < "$env_file"
-    done
-    
-    log_trace "Environment files loaded"
-}
-
-# Load host environment variables (layer 4)
-load_host_environment() {
-    log_trace "Loading host environment variables"
-    
-    # Get all DBLAB_* variables from environment
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^(DBLAB_[A-Z_]+)=(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            
-            log_trace "Setting host env value: $key=$(mask_sensitive "$value")"
-            RESOLVED_ENV[$key]="$value"
-            ENV_SOURCES[$key]="host_env"
-        fi
-    done < <(env | grep "^DBLAB_" || true)
-    
-    log_trace "Host environment loaded"
-}
-
-# Apply CLI overrides (layer 5)
-apply_cli_overrides() {
-    local overrides=("$@")
-    
-    log_trace "Applying CLI overrides"
-    
-    for override in "${overrides[@]}"; do
-        if [[ "$override" =~ ^([A-Z_]+)=(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            
-            log_trace "Setting CLI override: $key=$(mask_sensitive "$value")"
-            RESOLVED_ENV[$key]="$value"
-            ENV_SOURCES[$key]="cli"
-        fi
-    done
-    
-    log_trace "CLI overrides applied"
-}
-
-# Validate required environment variables
-validate_required_env() {
-    local required_vars=("$@")
-    local missing_vars=()
-    
-    log_trace "Validating required environment variables"
-    
-    for var in "${required_vars[@]}"; do
-        if [[ -z "${RESOLVED_ENV[$var]:-}" ]]; then
-            missing_vars+=("$var")
-        fi
-    done
-    
-    if [[ ${#missing_vars[@]} -gt 0 ]]; then
-        log_error "Missing required environment variables:"
-        for var in "${missing_vars[@]}"; do
-            log_error "  - $var"
-        done
-        die "Environment validation failed"
-    fi
-    
-    log_trace "Environment validation passed"
-}
-
-# Validate required environment variables using metadata file (enhanced version)
-validate_required_env_with_metadata() {
-    local metadata_file="$1"
-    local env_prefix="$2"
-    
-    log_trace "Validating required environment variables using metadata: $metadata_file"
-    
-    # Source validator.sh if not already loaded
-    if ! command -v validate_env_against_metadata >/dev/null 2>&1; then
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        source "${SCRIPT_DIR}/validator.sh"
-    fi
-    
-    # Use metadata-driven validation
-    if ! validate_env_against_metadata "$metadata_file" "$env_prefix"; then
-        die "Environment validation failed against metadata"
-    fi
-    
-    log_trace "Metadata-driven environment validation passed"
-}
-
-# Export resolved environment to current shell
-export_resolved_env() {
-    local export_sensitive="${1:-false}"
-    
-    log_trace "Exporting resolved environment"
-    
-    for key in "${!RESOLVED_ENV[@]}"; do
-        local value="${RESOLVED_ENV[$key]}"
-        
-        # Skip sensitive values unless explicitly requested
-        if [[ "$export_sensitive" == "false" && "$key" =~ PASSWORD|TOKEN|SECRET ]]; then
-            log_trace "Skipping sensitive variable: $key"
-            continue
-        fi
-        
-        export "$key=$value"
-        log_trace "Exported: $key=$(mask_sensitive "$value") [source: ${ENV_SOURCES[$key]}]"
-    done
-}
-
 # Get resolved environment value
 get_env() {
     local key="$1"
@@ -234,238 +20,7 @@ get_env() {
     
     echo "${RESOLVED_ENV[$key]:-$default}"
 }
-
-# Get environment value source
-get_env_source() {
-    local key="$1"
-    echo "${ENV_SOURCES[$key]:-unknown}"
-}
-
-# Show environment resolution details for diagnostics
-show_env_resolution() {
-    local show_sensitive="${1:-false}"
-    
-    log_info "Environment Resolution Details:"
-    log_info "================================"
-    
-    for key in $(printf '%s\n' "${!RESOLVED_ENV[@]}" | sort); do
-        local value="${RESOLVED_ENV[$key]}"
-        local source="${ENV_SOURCES[$key]}"
-        
-        if [[ "$show_sensitive" == "false" && "$key" =~ PASSWORD|TOKEN|SECRET ]]; then
-            value="****"
-        fi
-        
-        printf "%-30s = %-20s [%s]\n" "$key" "$value" "$source"
-    done
-}
-
-# Main environment loading function
-load_environment() {
-    local metadata_file="${1:-}"
-    shift || true
-    local env_files=("$@")
-    local cli_overrides=()
-    
-    log_debug "Starting environment loading process"
-    log_trace "Metadata file: $metadata_file"
-    log_trace "Environment files: ${env_files[*]:-none}"
-    
-    # Clear previous state
-    RESOLVED_ENV=()
-    ENV_SOURCES=()
-    
-    # Load each layer in order
-    set_core_defaults
-    
-    if [[ -n "$metadata_file" ]]; then
-        load_metadata_defaults "$metadata_file"
-    fi
-    
-    if [[ ${#env_files[@]} -gt 0 ]]; then
-        load_env_files "${env_files[@]}"
-    fi
-    
-    load_host_environment
-    
-    # CLI overrides would be applied by caller
-    # apply_cli_overrides "${cli_overrides[@]}"
-    
-    log_debug "Environment loading completed"
-}
-
-# Reset environment state
-reset_environment() {
-    RESOLVED_ENV=()
-    ENV_SOURCES=()
-    log_trace "Environment state reset"
-}
-
-# Export functions for use by other modules
-export -f load_environment reset_environment get_env get_env_source
-export -f validate_required_env validate_required_env_with_metadata export_resolved_env show_env_resolution
-export -f apply_cli_overrides
-
-# ================================================================
-# env_loader.sh
-# - Merge env-layers (5 stages) to create final configuration values ENV[...]
-# ================================================================
-# Layer structure:
-#   1. core defaults
-#   2. metadata.yml defaults
-#   3. env-file (multiple, later overrides)
-#   4. OS env (DBLAB_* namespace)
-#   5. CLI options (highest priority)
-#
-# Purpose:
-#   - Merge each layer with last-wins strategy
-#   - Check metadata.required_env
-#   - Fixed attributes in instance.yml cannot be overridden
-# ================================================================
-
-# ================================================================
-# env-loader main function
-# ================================================================
-#
-# Arguments:
-#   $1 = engine ("postgres" etc)
-#   $2 = env-file1
-#   $3 = env-file2
-#   ...
-#   last = instance name (may be empty)
-#
-#   metadata.yml is already stored in META[...] by command_dispatcher
-#   instance.yml is stored in INSTANCE[...] (if exists)
-#
-# After calling:
-#   ENV[...] contains final resolved values
-# ================================================================
-dblab_env_merge() {
-    local engine="$1"
-    local instance="$2"
-    local meta_name="$3"
-    local inst_name="$4"
-    shift 4
-
-    local env_files=("$@")
-
-    # ------------- Prepare META and INSTANCE references --------------------
-    # indirect reference to META[...] and INSTANCE[...]
-    declare -n META_REF="$meta_name"
-    declare -n INSTANCE_REF="$inst_name"
-
-    # ENV is the final constructed associative array
-    declare -gA ENV=()
-
-    # Instance name specified by CLI
-    instance_name="${INSTANCE_REF[instance]:-${DBLAB_INSTANCE:-}}"
-
-    # ---------------------------------------------------------
-    # 1. core defaults (minimal, add more if needed)
-    # ---------------------------------------------------------
-    # Example: ENV["DBLAB_LOG_LEVEL"]="info"
-    # Currently empty implementation (add in future)
-    :
-
-    # ---------------------------------------------------------
-    # 2. metadata.yml defaults
-    # ---------------------------------------------------------
-    # metadata.yml example:
-    # defaults:
-    #   DBLAB_PG_USER: postgres
-    #
-    for k in "${!META_REF[@]}"; do
-        if [[ "$k" == defaults.* ]]; then
-            key="${k#defaults.}"
-            ENV["$key"]="${META_REF[$k]}"
-        fi
-    done
-
-    # ---------------------------------------------------------
-    # 3. env-file (multiple files, later wins)
-    # ---------------------------------------------------------
-    for f in "$@"; do
-        if [[ "$f" == *.env && -f "$f" ]]; then
-            log_debug "Loading env-file: $f"
-            while IFS='=' read -r k v; do
-                [[ -z "$k" || "$k" == \#* ]] && continue
-                ENV["$k"]="$v"
-            done < "$f"
-        fi
-    done
-
-    # ---------------------------------------------------------
-    # 4. OS environment variables (DBLAB_*)
-    # ---------------------------------------------------------
-    # Example: DBLAB_PG_USER=foo → ENV["DBLAB_PG_USER"]=foo
-    for var in $(env | awk -F= '/^DBLAB_/ {print $1}'); do
-        ENV["$var"]="${!var}"
-    done
-
-    # ---------------------------------------------------------
-    # 5. CLI options (method: core dispatcher sets ENV and passes)
-    # ---------------------------------------------------------
-    # Here we assume "already reflected in ENV[...]" and do nothing
-    # ex: ENV["DBLAB_PG_VERSION"]="$CLI_VERSION"
-    :
-
-    # ============================================================
-    # Fixed attributes in instance.yml cannot be overridden
-    # ============================================================
-    # Fixed attributes:
-    #   - engine
-    #   - version
-    #   - instance
-    #   - network.mode
-    #   - network.name
-    # -------------------------------------------------------------
-    if [ -n "${INSTANCE_REF[engine]:-}" ]; then
-        # Align backing field name correspondence
-        fixed_engine="${INSTANCE_REF[engine]}"
-        fixed_version="${INSTANCE_REF[version]:-}"
-        fixed_instance="${INSTANCE_REF[instance]:-}"
-        fixed_network_mode="${INSTANCE_REF[network.mode]:-}"
-
-        # Override prohibition logic
-        if [[ -n "${ENV[DBLAB_${engine^^}_VERSION]:-}" && "${ENV[DBLAB_${engine^^}_VERSION]}" != "$fixed_version" ]]; then
-            log_error "Cannot change version for existing instance. instance.yml has version=$fixed_version"
-        fi
-
-        # Engine name change is impossible in the first place
-        if [[ -n "${ENV[DBLAB_ENGINE]:-}" && "${ENV[DBLAB_ENGINE]}" != "$fixed_engine" ]]; then
-            log_error "Cannot change engine for existing instance."
-        fi
-
-        # Instance name conflict
-        if [[ -n "$instance_name" && "$instance_name" != "$fixed_instance" ]]; then
-            log_error "CLI instance '$instance_name' does not match instance.yml '$fixed_instance'"
-        fi
-
-        # network.mode is command-specific (cannot be changed)
-        if [[ -n "${ENV[DBLAB_NETWORK_MODE]:-}" && "${ENV[DBLAB_NETWORK_MODE]}" != "$fixed_network_mode" ]]; then
-            log_error "Cannot change network.mode for existing instance."
-        fi
-
-        # Reflect instance.yml values to ENV (priority)
-        for k in "${!INSTANCE_REF[@]}"; do
-            ENV["$k"]="${INSTANCE_REF[$k]}"
-        done
-    fi
-
-    # ============================================================
-    # Check metadata.required_env
-    # ============================================================
-    for k in "${!META_REF[@]}"; do
-        if [[ "$k" == required_env.* ]]; then
-            req="${META_REF[$k]}"
-            if [[ -z "${ENV[$req]:-}" ]]; then
-                log_error "Missing required env: $req"
-            fi
-        fi
-    done
-
-    log_debug "ENV merge completed. Total keys: ${#ENV[@]}"
-}
+export -f get_env
 
 # =============================================================
 # env_loader.sh
@@ -507,56 +62,100 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 # -------------------------------------------------------------
 env_load() {
     local engine="$1"
-    local -n meta_ref="$2"          # Not used but for signature
-    local -n _INSTANCE_FIXED="$3"  # Unused per spec "doesn't depend"
+    local -n env_files="$2"
+    local -n env_map_ref="$3"
     local -n OUT_ENV="$4"       # Output: env-runtime assoc
 
     log_debug "[env] load for engine=$engine"
 
     # Temporary map: merge defaults + env-file + OS env
-    declare -A merged=()
+    declare -A env_raw=()
 
-    # 1) Apply metadata.defaults as base
-    _env_apply_defaults merged
+    # 1. Apply env-file group (multiple allowed, last wins)
+    # _env_apply_env_files merged
+    # 1. Read ENV files (in order of priority from lowest to highest)
+    _env_apply_env_files env_files env_raw
+    # local f
+    # for f in "${env_files[@]}"; do
+    #     _load_from_file "$f" env_raw
+    # done
 
-    # 2) Apply env-file group (multiple allowed, last wins)
-    _env_apply_env_files merged
+    # 2. Apply OS environment variables DBLAB_* (highest priority)
+    _env_apply_os_env env_raw
 
-    # 3) Apply OS environment variables DBLAB_* (highest priority)
-    _env_apply_os_env merged
+    # 3. Normalize to internal keys
+    _normalize env_raw env_map_ref OUT_ENV
 
-    # 4) Static check of required_env
+    # 3. Static check of required_env
     # _env_check_required merged
-
-    # 5) Copy to caller's OUT_ENV
-    for k in "${!merged[@]}"; do
-        OUT_ENV["$k"]="${merged[$k]}"
-    done
 
     log_debug "[env] merged keys: ${!OUT_ENV[*]}"
 }
 
+# ---------------------------------------------------------
+# env_loader.load_from_file
+#   Load key=value from .env file
+#
+# @param file_path
+# @param assoc_name → Store in env_raw[...] (assumes DBLAB_ prefix)
+# ---------------------------------------------------------
+_load_from_file() {
+    local file="$1"
+    local -n out="$2"
 
-# =============================================================
-# 1) Apply metadata.defaults
-# =============================================================
-_env_apply_defaults() {
-    local -n OUT="$1"
-
-    # META_DEFAULTS is expected to be loaded by metadata_loader.sh
-    if ! declare -p META_DEFAULTS &>/dev/null; then
-        log_debug "[env] META_DEFAULTS not defined (no defaults)"
-        return
+    if [[ ! -f "$file" ]]; then
+        echo "[env_loader] WARNING: env-file not found: $file" >&2
+        return 0
     fi
 
-    local key
-    for key in "${!META_DEFAULTS[@]}"; do
-        OUT["$key"]="${META_DEFAULTS[$key]}"
-    done
+    while IFS='=' read -r key val; do
+        # Skip empty lines and comments
+        [[ -z "$key" ]] && continue
+        [[ "$key" =~ ^# ]] && continue
 
-    log_debug "[env] applied metadata.defaults (${#META_DEFAULTS[@]} keys)"
+        out["$key"]="$val"
+    done < "$file"
 }
 
+# ---------------------------------------------------------
+# env_loader.load_runtime_env
+#   Extract DBLAB_* from host environment variables
+#
+# @param assoc_name → Store in env_raw[...]
+# ---------------------------------------------------------
+_load_runtime_env() {
+    local -n out="$1"
+
+    local key
+    for key in $(env | cut -d= -f1); do
+        if [[ "$key" == DBLAB_* ]]; then
+            out["$key"]="${!key}"
+        fi
+    done
+}
+
+# ---------------------------------------------------------
+# env_loader.normalize
+#   Convert env_raw[...] (DBLAB_* format) to internal-key format according to env_map[...]
+#
+# @param env_raw_name
+# @param env_map_name
+# @param out_assoc_name → Result converted to internal keys
+# ---------------------------------------------------------
+_normalize() {
+    local -n raw="$1"
+    local -n env_map="$2"
+    local -n out="$3"
+
+    local key
+    for key in "${!raw[@]}"; do
+        # Ignore keys not in env_map (environment variables not handled by this engine)
+        if [[ -n "${env_map[$key]+_}" ]]; then
+            local internal="${env_map[$key]}"
+            out["$internal"]="${raw[$key]}"
+        fi
+    done
+}
 
 # =============================================================
 # 2) Apply env-file group (last wins)
@@ -564,15 +163,16 @@ _env_apply_defaults() {
 #   - Supports only KEY=VALUE format (simple)
 # =============================================================
 _env_apply_env_files() {
-    local -n OUT="$1"
+    local -n env_files_ref="$1"
+    local -n OUT="$2"
 
     # If ENV_FILES is undefined, do nothing
-    if [[ "${ENV_FILES+x}" != "x" ]]; then
+    if [[ "${env_files+x}" != "x" ]]; then
         return
     fi
 
     local file
-    for file in "${ENV_FILES[@]}"; do
+    for file in "${env_files_ref[@]}"; do
         if [[ ! -f "$file" ]]; then
             log_fatal "[env] env-file not found: $file"
         fi
