@@ -313,6 +313,18 @@ remove_instance() {
     fi
     
     log_info "Removing instance: $engine/$instance"
+    
+    # Handle permission issues that may occur with container-created files
+    if [[ -d "$data_dir" ]] && ! touch "$data_dir/.dblab_test" 2>/dev/null; then
+        log_debug "Permission issue detected, attempting to fix ownership"
+        if command_exists sudo; then
+            sudo chown -R "$(whoami)" "$data_dir" 2>/dev/null || true
+        fi
+    else
+        # Clean up test file
+        rm -f "$data_dir/.dblab_test" 2>/dev/null || true
+    fi
+    
     safe_rm "$data_dir"
     log_info "Instance removed successfully"
 }

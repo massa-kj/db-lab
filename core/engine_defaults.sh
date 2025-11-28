@@ -74,9 +74,6 @@ default_engine_destroy() {
         return 0
     fi
     
-    # Load instance configuration
-    # load_instance "$engine" "$instance"
-    
     local container_name network_name data_dir
     container_name=$(get_container_name "$engine" "$instance")
     data_dir="${C[storage.data_dir]}"
@@ -93,7 +90,7 @@ default_engine_destroy() {
             
             # Get engine-specific stop timeout (default 30 seconds)
             local stop_timeout
-            stop_timeout="${C[engine.stop_timeout]:-30}"
+            stop_timeout="${C[engine.stop_timeout]:-60}"
             stop_container "$container_name" "$stop_timeout"
         fi
         
@@ -117,11 +114,18 @@ default_engine_destroy() {
     fi
     
     # Handle data removal
-    _handle_data_removal "$engine" "$instance" "$data_dir" C
+    local data_removed="false"
+    _handle_data_removal "$engine" "$instance" "$data_dir" C data_removed
     
     # Remove instance configuration
     log_info "Removing instance configuration"
-    remove_instance "$engine" "$instance" true  # Force removal
+    if [[ "$data_removed" == "true" ]]; then
+        # Data was removed, safe to remove entire instance directory
+        remove_instance "$engine" "$instance" true  # Force removal
+    else
+        # Data was preserved, only remove configuration files
+        _remove_instance_config_only "$engine" "$instance"
+    fi
     
     log_info "$engine instance '$instance' destroyed successfully"
 }
@@ -134,11 +138,12 @@ _handle_data_removal() {
     local instance="$2" 
     local data_dir="$3"
     local -n cfg_ref="$4"
+    local -n result_ref="$5"
     
     # Ask for confirmation before removing data
     local remove_data="false"
     local ephemeral
-    ephemeral=$(get_instance_config "ephemeral" "false")
+    ephemeral="${cfg_ref[storage.persistent]:-false}"
     
     if [[ "$ephemeral" == "true" ]]; then
         log_info "Instance is ephemeral, removing data automatically"
@@ -164,18 +169,26 @@ _handle_data_removal() {
         if [[ -d "$data_dir" ]]; then
             log_info "Removing data directory: $data_dir"
             
+            # Extract cleanup parameters from CFG
+            local cleanup_image cleanup_command fallback_image
+            cleanup_image="${cfg_ref[engine.cleanup.image]:-}"
+            cleanup_command="${cfg_ref[engine.cleanup.command]:-}"
+            fallback_image="${cfg_ref[image]:-}"
+            
             # Try engine-specific cleanup first
-            if _try_engine_specific_cleanup "$engine" "$data_dir" cfg_ref; then
+            if _try_engine_specific_cleanup "$engine" "$data_dir" "$cleanup_image" "$cleanup_command" "$fallback_image"; then
                 log_debug "Engine-specific cleanup succeeded"
             else
                 # Fallback to generic cleanup
                 _generic_cleanup "$data_dir"
             fi
         fi
+        result_ref="true"
     else
         log_info "Data directory preserved: $data_dir"
         log_info "Note: Data was preserved and can be reused by creating a new instance"
         log_info "      with the same name and configuration."
+        result_ref="false"
     fi
 }
 
@@ -185,36 +198,28 @@ _handle_data_removal() {
 _try_engine_specific_cleanup() {
     local engine="$1"
     local data_dir="$2"
-    local -n cfg_ref="$3"
+    local cleanup_image="$3"
+    local cleanup_command="$4"
+    local fallback_image="$5"
     
     # Check if container runtime is available
     if ! command_exists "${DBLAB_CONTAINER_RUNTIME}"; then
         return 1
     fi
     
-    # Get cleanup image and command from CFG (engine-specific)
-    # Use a simple approach - check if keys exist before accessing them
-    local cleanup_image cleanup_command
-    
-    # Use a safer approach for accessing array elements with dots
-    cleanup_image=""
-    cleanup_command="rm -rf /data/*"
-    
-    # Check if engine.cleanup.image exists
-    if [[ -n "${cfg_ref[engine.cleanup.image]:-}" ]]; then
-        cleanup_image="${cfg_ref[engine.cleanup.image]}"
+    # Use provided cleanup image or fallback to main image
+    if [[ -z "$cleanup_image" ]] && [[ -n "$fallback_image" ]]; then
+        cleanup_image="$fallback_image"
     fi
     
-    if [[ -n "${cfg_ref[engine.cleanup.command]:-}" ]]; then
-        cleanup_command="${cfg_ref[engine.cleanup.command]}"
+    # Default cleanup command if not specified
+    if [[ -z "$cleanup_command" ]]; then
+        cleanup_command="rm -rf /data/*"
     fi
-
-    # If no cleanup image specified, try to derive from main image
+    
+    # If still no cleanup image available, return failure
     if [[ -z "$cleanup_image" ]]; then
-        cleanup_image="${cfg_ref[image]:-}"
-        if [[ -z "$cleanup_image" ]]; then
-            return 1  # No image available
-        fi
+        return 1
     fi
     
     log_debug "Using container runtime to remove data with proper permissions"
@@ -274,3 +279,29 @@ default_engine_status() {
 
 # Export functions for use by engines
 export -f default_engine_down default_engine_destroy default_engine_status
+
+# =============================================================
+# Remove only instance configuration files, preserving data directory
+# =============================================================
+_remove_instance_config_only() {
+    local engine="$1"
+    local instance="$2"
+    
+    local instance_dir="${DBLAB_BASE_DIR}/${engine}/${instance}"
+    local data_sub_dir="$instance_dir/data"
+    
+    if [[ ! -d "$instance_dir" ]]; then
+        log_debug "Instance directory does not exist: $instance_dir"
+        return 0
+    fi
+    
+    log_debug "Removing configuration files from: $instance_dir"
+    
+    # Remove all files in instance directory except data subdirectory
+    find "$instance_dir" -maxdepth 1 -type f -exec rm -f {} \; 2>/dev/null || true
+    
+    # Remove empty subdirectories but preserve data directory
+    find "$instance_dir" -maxdepth 1 -type d -name "data" -prune -o -type d ! -path "$instance_dir" -exec rmdir {} \; 2>/dev/null || true
+    
+    log_debug "Configuration files removed, data directory preserved"
+}
