@@ -79,49 +79,8 @@ parse_yaml_section() {
     ' "$file" | sed 's/^["\047]*//;s/["\047]*$//;s/=["\047]*/=/;s/["\047]*$//'
 }
 
-# Get single YAML value
-parse_yaml_value() {
-    local file="$1"
-    local key="$2"
-    
-    if [[ ! -f "$file" ]]; then
-        log_error "File not found: $file"
-        return 1
-    fi
-    
-    grep "^${key}:" "$file" | head -1 | sed "s/^${key}:[[:space:]]*//" | sed 's/^["\047]//;s/["\047]$//'
-}
-
-# Validate YAML file basic structure
-validate_yaml_file() {
-    local file="$1"
-    
-    if [[ ! -f "$file" ]]; then
-        log_error "File not found: $file"
-        return 1
-    fi
-    
-    # Basic validation: check for balanced colons and basic structure
-    if ! grep -q ":" "$file"; then
-        log_error "Invalid YAML: No key-value pairs found in $file"
-        return 1
-    fi
-    
-    # Check for required_env array
-    if ! grep -q "^required_env:" "$file"; then
-        log_warn "Warning: No required_env section found in $file"
-    fi
-    
-    # Check for defaults section
-    if ! grep -q "^defaults:" "$file"; then
-        log_warn "Warning: No defaults section found in $file"
-    fi
-    
-    return 0
-}
-
 # Export functions
-export -f parse_yaml_array parse_yaml_section parse_yaml_value validate_yaml_file
+export -f parse_yaml_array parse_yaml_section
 
 # ---------------------------------------------------------
 # New yaml_parser.sh
@@ -192,7 +151,7 @@ yaml_parse_file() {
         # -------------------------------
         # 1. "key: value" format
         # -------------------------------
-        if [[ "$text" =~ ^([A-Za-z0-9_-]+):[[:space:]]*(.+)$ ]]; then
+        if [[ "$text" =~ ^([A-Za-z0-9_.-]+):[[:space:]]*(.+)$ ]]; then
             local key="${BASH_REMATCH[1]}"
             local value="${BASH_REMATCH[2]}"
 
@@ -216,7 +175,7 @@ yaml_parse_file() {
         # -------------------------------
         # 2. "key:" section start only
         # -------------------------------
-        if [[ "$text" =~ ^([A-Za-z0-9_-]+):[[:space:]]*$ ]]; then
+        if [[ "$text" =~ ^([A-Za-z0-9_.-]+):[[:space:]]*$ ]]; then
             local key="${BASH_REMATCH[1]}"
 
             context_stack=( "${context_stack[@]:0:$level}" )
@@ -337,6 +296,9 @@ yaml_get_array() {
 # Get object (key-value pairs) from YAML data as associative array
 # Example: yaml_get_object metadata "generate_template.comments" comments
 # Result: comments["DBLAB_PG_VERSION"]="Image tag (ex: 16, 16-alpine)", etc.
+# For nested structures like instance_fields, it will include all nested keys:
+# Example: yaml_get_object metadata "instance_fields" fields
+# Result: fields["db.user.required"]="true", fields["db.password.required"]="true", etc.
 yaml_get_object() {
     local -n source_ref="$1"
     local object_path="$2"
@@ -355,9 +317,9 @@ yaml_get_object() {
             # Remove object prefix to get the new key
             local new_key="${key:$prefix_len}"
             
-            # Skip if new_key is empty or contains dots/brackets (nested structures)
-            # This ensures we only get direct children of the object
-            if [[ -n "$new_key" && "$new_key" != *.* && "$new_key" != *[* ]]; then
+            # Skip if new_key is empty or contains array brackets (but allow dots for nested structures)
+            # This allows nested keys like "db.user.required" while excluding array elements like "list[0]"
+            if [[ -n "$new_key" && "$new_key" != *\[* ]]; then
                 target_object["$new_key"]="${source_ref[$key]}"
                 # Debug output only if log_debug function exists
                 if declare -F log_debug >/dev/null 2>&1; then
@@ -373,4 +335,133 @@ yaml_get_object() {
     fi
 }
 
-export -f yaml_parse_file yaml_get yaml_has yaml_key_exists yaml_dump yaml_get_array yaml_get_object
+#
+# yaml_render_assoc <assoc_name>
+#
+# Supported:
+#   - a.b.c           → nested mapping
+#   - a.b.list[0]     → list item
+#   - a.b.list[1]     → list item
+#
+yaml_render_assoc() {
+    local assoc_name="$1"
+    local -n _src="$assoc_name"
+
+    # Sort all keys
+    local keys
+    IFS=$'\n' read -r -d '' -a keys < <(
+        printf "%s\n" "${!_src[@]}" | LC_ALL=C sort && printf '\0'
+    )
+
+    # Pseudo-tree that maintains hierarchical structure
+    declare -A tree=()
+    declare -A is_list_node=()
+
+    # Internal function: YAML-safe quoting
+    _yaml_quote() {
+        local val="$1"
+        [[ -z "$val" ]] && { printf "\"\""; return; }
+        printf "\"%s\"" "${val//\"/\\\"}"
+    }
+
+    # First build tree (hierarchical path → value or list node)
+    local key
+    for key in "${keys[@]}"; do
+        local value="${_src[$key]}"
+
+        # List key detection (example: db.ports[1])
+        if [[ "$key" =~ ^(.+)\[([0-9]+)\]$ ]]; then
+            local base="${BASH_REMATCH[1]}"
+            local idx="${BASH_REMATCH[2]}"
+
+            tree["$base[$idx]"]="$value"
+            is_list_node["$base"]=1
+            continue
+        fi
+
+        # For normal keys
+        tree["$key"]="$value"
+    done
+
+    # Retrieve all keys again in nested order
+    IFS=$'\n' read -r -d '' -a tree_keys < <(
+        printf "%s\n" "${!tree[@]}" | LC_ALL=C sort && printf '\0'
+    )
+
+    local last_prefix=""
+    local prefix_depth=0
+
+    # indent
+    _indent() {
+        local n="$1"
+        printf "%*s" $((n * 2)) ""
+    }
+
+    # Output prefix array path (mapping part)
+    _emit_prefixes() {
+        local -a parts=("$@")
+        local depth="${#parts[@]}"
+
+        for ((i=0; i<depth; i++)); do
+            local prefix_path="${parts[*]:0:$((i+1))}"
+
+            if [[ "$prefix_path" == "$last_prefix" ]]; then
+                continue
+            fi
+
+            _indent "$i"
+            printf "%s:\n" "${parts[$i]}"
+
+            last_prefix="$prefix_path"
+        done
+    }
+
+    # Main loop
+    local tk
+    for tk in "${tree_keys[@]}"; do
+
+        if [[ "$tk" =~ ^(.+)\[([0-9]+)\]$ ]]; then
+            # list item
+            local base="${BASH_REMATCH[1]}"
+            local idx="${BASH_REMATCH[2]}"
+            local val="${tree[$tk]}"
+
+            # base is a prefix like a.b.c
+            IFS='.' read -r -a parts <<<"$base"
+
+            # Output mapping prefix
+            _emit_prefixes "${parts[@]}"
+
+            # List header (mapping → sequence switch)
+            if [[ "$last_prefix" != "$base" ]]; then
+                # Output header (base:) if not output before list node
+                _indent "${#parts[@]-1}"
+                printf "%s:\n" "${parts[-1]}"
+                last_prefix="$base"
+            fi
+
+            # list item
+            _indent "${#parts[@]}"
+            printf "- "
+            _yaml_quote "$val"
+            printf "\n"
+
+        else
+            # normal key
+            IFS='.' read -r -a parts <<<"$tk"
+
+            # mapping prefix
+            _emit_prefixes "${parts[@]:0:${#parts[@]}-1}"
+
+            # Output
+            local indent=$(( ${#parts[@]} - 1 ))
+            _indent "$indent"
+            printf "%s: " "${parts[-1]}"
+            _yaml_quote "${tree[$tk]}"
+            printf "\n"
+        fi
+
+    done
+}
+
+export -f yaml_parse_file yaml_get yaml_has yaml_key_exists yaml_dump yaml_get_array yaml_get_object yaml_render_assoc
