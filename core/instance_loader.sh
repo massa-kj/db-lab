@@ -8,6 +8,7 @@ set -euo pipefail
 # Source core utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
+source "${SCRIPT_DIR}/yaml_parser.sh"
 
 # Instance state structure
 declare -A INSTANCE_CONFIG=()
@@ -177,144 +178,12 @@ EOF
     log_info "Instance created successfully: $instance_file"
 }
 
-# Load instance configuration into memory
-load_instance() {
-    local engine="$1"
-    local instance="$2"
-    
-    if ! instance_exists "$engine" "$instance"; then
-        die "Instance does not exist: $engine/$instance"
-    fi
-    
-    local instance_file
-    instance_file=$(get_instance_file "$engine" "$instance")
-    
-    log_debug "Loading instance configuration: $instance_file"
-    
-    # Clear previous configuration
-    INSTANCE_CONFIG=()
-    
-    # Simple YAML parsing for flat key-value pairs
-    while IFS= read -r line; do
-        # Skip empty lines and comments
-        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
-            continue
-        fi
-        
-        # Parse simple key: value pairs (flatten nested structure)
-        if [[ "$line" =~ ^[[:space:]]*([a-zA-Z_]+):[[:space:]]*(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            
-            # Remove quotes if present
-            value=$(echo "$value" | sed 's/^"//;s/"$//')
-            
-            INSTANCE_CONFIG[$key]="$value"
-        fi
-        
-        # Handle nested keys (simple flattening)
-        if [[ "$line" =~ ^[[:space:]]+([a-zA-Z_]+):[[:space:]]*(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            
-            # Remove quotes if present
-            value=$(echo "$value" | sed 's/^"//;s/"$//')
-            
-            INSTANCE_CONFIG[$key]="$value"
-        fi
-    done < "$instance_file"
-    
-    log_debug "Instance configuration loaded"
-}
-
 # Get instance configuration value
 get_instance_config() {
     local key="$1"
     local default="${2:-}"
     
     echo "${INSTANCE_CONFIG[$key]:-$default}"
-}
-
-# Update instance state
-update_instance_state() {
-    local engine="$1"
-    local instance="$2"
-    local key="$3"
-    local value="$4"
-    
-    if ! instance_exists "$engine" "$instance"; then
-        die "Instance does not exist: $engine/$instance"
-    fi
-    
-    local instance_file
-    instance_file=$(get_instance_file "$engine" "$instance")
-    local timestamp
-    timestamp=$(date -Iseconds)
-    
-    log_debug "Updating instance state: $key=$value"
-    
-    # Create a backup
-    cp "$instance_file" "${instance_file}.backup"
-    
-    # Update the specific key in the state section
-    case "$key" in
-        last_up)
-            sed -i "s/^[[:space:]]*last_up:.*/  last_up: \"$timestamp\"/" "$instance_file"
-            ;;
-        last_down)
-            sed -i "s/^[[:space:]]*last_down:.*/  last_down: \"$timestamp\"/" "$instance_file"
-            ;;
-        status)
-            sed -i "s/^[[:space:]]*status:.*/  status: \"$value\"/" "$instance_file"
-            ;;
-        *)
-            log_warn "Unknown state key: $key"
-            ;;
-    esac
-    
-    # Remove backup on success
-    rm "${instance_file}.backup"
-}
-
-# Update runtime configuration
-update_runtime_config() {
-    local engine="$1"
-    local instance="$2"
-    local section="$3"
-    local key="$4"
-    local value="$5"
-    
-    if ! instance_exists "$engine" "$instance"; then
-        die "Instance does not exist: $engine/$instance"
-    fi
-    
-    local instance_file
-    instance_file=$(get_instance_file "$engine" "$instance")
-    
-    log_debug "Updating runtime config: $section.$key=$value"
-    
-    # Create a backup
-    cp "$instance_file" "${instance_file}.backup"
-    
-    # This is a simplified update - in production, proper YAML editing would be needed
-    case "$section" in
-        expose)
-            case "$key" in
-                enabled)
-                    sed -i "/^[[:space:]]*expose:/,/^[[:space:]]*[a-zA-Z]/ s/^[[:space:]]*enabled:.*/    enabled: $value/" "$instance_file"
-                    ;;
-                *)
-                    log_warn "Unsupported expose key: $key"
-                    ;;
-            esac
-            ;;
-        *)
-            log_warn "Unsupported runtime section: $section"
-            ;;
-    esac
-    
-    # Remove backup on success
-    rm "${instance_file}.backup"
 }
 
 # List all instances for an engine
@@ -449,37 +318,13 @@ remove_instance() {
 }
 
 # Export functions for use by other modules
-export -f instance_exists create_instance load_instance get_instance_config
-export -f update_instance_state update_runtime_config list_instances remove_instance
-export -f get_container_name get_network_name get_instance_file
-
-# New instance loader using yaml_parser.sh
-source "${SCRIPT_DIR}/yaml_parser.sh"
-instance_load() {
-    # local file="$1"
-    local engine="$1"
-    local instance="$2"
-    
-    if ! instance_exists "$engine" "$instance"; then
-        die "Instance does not exist: $engine/$instance"
-    fi
-    
-    local instance_file
-    instance_file=$(get_instance_file "$engine" "$instance")
-    
-    log_debug "Loading instance configuration: $instance_file"
-
-    yaml_parse_file "$instance_file" INSTANCE
-}
-
-export -f instance_load
+export -f instance_exists get_instance_config list_instances remove_instance get_container_name get_network_name get_instance_file
 
 dblab_instance_load() {
     local engine="$1"
     local instance="$2"
-    local out_name="$3" # Name of the output associative array
-
-    declare -n OUT="$out_name"
+    local -n OUT_INSTANCE="$3" # assoc-array
+    local -n OUT_INSTANCE_FIXED="$4" # assoc-array
 
     local file
     file=$(get_instance_file "$engine" "$instance")
@@ -492,17 +337,43 @@ dblab_instance_load() {
     log_debug "Loading instance.yml: $file"
 
     # declare -A tmp=()
-    yaml_parse_file "$file" OUT
+    yaml_parse_file "$file" OUT_INSTANCE
 
-    # for k in "${!YAML[@]}"; do
-    #     tmp["$k"]="${YAML[$k]}"
-    # done
-    # unset YAML
-
-    # Copy to the calling array
-    # for k in "${!tmp[@]}"; do
-    #     OUT["$k"]="${tmp[$k]}"
-    # done
+    _instance_extract_fixed OUT_INSTANCE OUT_INSTANCE_FIXED
+    # Minimal validation of fixed attributes
+    # _instance_validate_fixed_structure OUT_INSTANCE_FIXED "$engine" "$instance"
 
     return 0
+}
+
+# =============================================================
+# Fixed Attribute Extraction
+# -------------------------------------------------------------
+# engine / instance / version / network.* / image / db initial attributes
+# =============================================================
+_instance_extract_fixed() {
+    local -n RAW="$1"
+    local -n OUT="$2"
+
+    OUT[engine]="${RAW[engine]}"
+    OUT[instance]="${RAW[instance]}"
+    OUT[version]="${RAW[version]}"
+
+    # network.*
+    OUT[network.mode]="${RAW[network.mode]}"
+    # OUT[network.name]="${RAW[network.name]}"
+
+    OUT[image]="${RAW[image]}"
+
+    # db.*
+    OUT[db.user]="${RAW[db.user]}"
+    OUT[db.password]="${RAW[db.password]}"
+    OUT[db.database]="${RAW[db.database]}"
+    OUT[db.port]="${RAW[db.port]}"
+
+    # storage.*
+    OUT[storage.persistent]="${RAW[storage.persistent]}"
+    OUT[storage.data_dir]="${RAW[storage.data_dir]}"
+    OUT[storage.config_dir]="${RAW[storage.config_dir]}"
+    OUT[storage.log_dir]="${RAW[storage.log_dir]}"
 }
