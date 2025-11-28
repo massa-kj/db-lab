@@ -59,11 +59,25 @@ metadata_load() {
     # ---------------------------------------------------------
     # 2. Extract defaults section
     # ---------------------------------------------------------
-    if yaml_get_object OUT_META "defaults" OUT_DEFAULTS; then
-        :
-    else
-        log_error "metadata.yml missing defaults section"
-    fi
+    # if yaml_get_object OUT_META "defaults" OUT_DEFAULTS; then
+    #     :
+    # else
+    #     log_error "metadata.yml missing defaults section"
+    # fi
+    declare -gA META_DEFAULT_MAP=()
+    yaml_get_object OUT_META "defaults_map" META_DEFAULT_MAP
+    for key in "${!OUT_META[@]}"; do
+        if [[ "$key" == defaults.* ]]; then
+            local meta_def_key="${key#defaults.}"
+
+            # If it does not exist in defaults_map, it is ignored (value not handled by this engine).
+            if [[ -n "${META_DEFAULT_MAP[$meta_def_key]+_}" ]]; then
+                local internal_key="${META_DEFAULT_MAP[$meta_def_key]}"
+                OUT_DEFAULTS["$internal_key"]="${OUT_META[$key]}"
+            fi
+        fi
+    done
+
 
     # ---------------------------------------------------------
     # 3. Get required_env (list)
@@ -104,6 +118,15 @@ metadata_load() {
     else
         log_debug "No CLI configuration found in metadata (optional)"
     fi
+
+    # ---------------------------------------------------------
+    # 
+    # ---------------------------------------------------------
+    declare -gA META_DB_FIELDS=()
+    declare -gA META_ENV_MAP=()
+    yaml_get_object OUT_META "instance_fields" META_DB_FIELDS
+
+    yaml_get_object OUT_META "env_map" META_ENV_MAP
 
     log_debug "[metadata] loaded: engine=$engine required_env=${#META_REQUIRED_ENV[@]} defaults=${#OUT_DEFAULTS[@]}"
 }
