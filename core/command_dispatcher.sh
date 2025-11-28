@@ -15,7 +15,13 @@ source "${SCRIPT_DIR}/metadata_loader.sh"
 source "${SCRIPT_DIR}/instance_loader.sh"
 source "${SCRIPT_DIR}/env_loader.sh"
 source "${SCRIPT_DIR}/merge_layers.sh"
+source "${SCRIPT_DIR}/config_interpolator.sh"
 source "${SCRIPT_DIR}/validator.sh"
+source "${SCRIPT_DIR}/instance_writer.sh"
+
+# =============================================================
+# Core dispatcher functions  
+# =============================================================
 
 # Safely ensure script is executable (ignore permission errors)
 ensure_executable() {
@@ -29,34 +35,6 @@ ensure_executable() {
     else
         die "Script not found: $script_path"
     fi
-}
-
-# Execute a command on an engine with proper validation and setup
-dispatch_engine_command() {
-    local command="$1"
-    local engine="$2"
-    local instance="$3"
-    shift 3
-    local additional_args=("$@")
-    
-    log_debug "Dispatching command: $command for $engine/$instance"
-    
-    # Get engine script path
-    local project_dir="$(dirname "$SCRIPT_DIR")"
-    local engines_dir="${project_dir}/engines"
-    local engine_script="${engines_dir}/${engine}/main.sh"
-    
-    # Validate engine script exists
-    if [[ ! -f "$engine_script" ]]; then
-        die "Engine script not found: $engine_script"
-    fi
-    
-    # Make sure script is executable
-    ensure_executable "$engine_script"
-    
-    # Execute the engine command
-    log_debug "Executing: $engine_script $command $instance ${additional_args[*]}"
-    "$engine_script" "$command" "$instance" "${additional_args[@]}"
 }
 
 # Execute up command with environment validation
@@ -98,7 +76,7 @@ dispatch_up_command() {
     fi
     
     # Execute the up command
-    dispatch_engine_command "up" "$engine" "$instance" "${env_files[@]}"
+    # dispatch_engine_command "up" "$engine" "$instance" "${env_files[@]}"
 }
 
 # Execute init command with template generation
@@ -140,37 +118,6 @@ dispatch_list_command() {
     list_instances "$engine" "$verbose_mode"
 }
 
-# Execute simple engine commands (down, status, destroy)
-dispatch_simple_command() {
-    local command="$1"
-    local engine="$2" 
-    local instance="$3"
-    
-    local action_verb
-    case "$command" in
-        down) action_verb="Stopping" ;;
-        status) action_verb="Checking status of" ;;
-        destroy) action_verb="Destroying" ;;
-        *) action_verb="Processing" ;;
-    esac
-    
-    log_info "$action_verb $engine instance: $instance"
-    
-    # Execute the command
-    if [[ "$command" == "status" ]]; then
-        # For status command, capture and display the output
-        local status
-        status=$(dispatch_engine_command "$command" "$engine" "$instance")
-        log_info "Instance $engine/$instance status: $status"
-    else
-        dispatch_engine_command "$command" "$engine" "$instance"
-    fi
-}
-
-# Export functions for use by other modules
-export -f dispatch_engine_command dispatch_up_command dispatch_init_command
-export -f dispatch_list_command dispatch_simple_command ensure_executable
-
 dblab_dispatch_command() {
     local command="$1"
     local engine="$2"
@@ -210,20 +157,52 @@ dblab_dispatch_command() {
     log_debug "Loaded metadata for $engine"
 
     # ---------------------------------------------------------
+    # Load instance (fixed/runtime)
+    # ---------------------------------------------------------
+    # NOTE: Instance name is determined by CLI options or env upstream
+    # local instance="${CLI_RUNTIME[instance]:-}"
+    if [ -n "$instance" ]; then
+        if dblab_instance_load "$engine" "$instance" INSTANCE INSTANCE_FIXED; then
+            log_debug "Loaded instance configuration for $engine/$instance"
+        else
+            log_debug "No instance.yml found, treating as first 'up'"
+        fi
+    else
+        log_debug "No instance name specified; some commands may fail"
+    fi
+
+    # ---------------------------------------------------------
     # Load environment variables
     # ---------------------------------------------------------
-    env_load "$engine" META INSTANCE_FIXED ENV_RUNTIME
+    env_load "$engine" ENV_FILES META_ENV_MAP ENV_RUNTIME
 
     # ---------------------------------------------------------
     # Merge layers
     # ---------------------------------------------------------
+    # Ensure engine and instance are set in CLI_RUNTIME
+    CLI_RUNTIME[engine]="$engine"
+    CLI_RUNTIME[instance]="$instance"
+    
     merge_layers FINAL_CONFIG \
         META_DEFAULTS \
         INSTANCE_RUNTIME \
         ENV_RUNTIME \
         CLI_RUNTIME \
-        INSTANCE_FIXED
+        INSTANCE_FIXED \
+        META_DB_FIELDS
     log_debug "Merged configuration layers into FINAL_CONFIG"
+
+    # ---------------------------------------------------------
+    # Configuration interpolation
+    # ---------------------------------------------------------
+    config_interpolator FINAL_CONFIG
+
+    # ---------------------------------------------------------
+    # Semantic validation
+    # ---------------------------------------------------------
+    # TODO: Need mechanism to avoid using INSTANCE_FIXED for commands without instance specification
+    # validator_check "$engine" "$command" FINAL_CONFIG INSTANCE_FIXED
+    log_debug "Validation completed for command '$command'"
 
     # ---------------------------------------------------------
     # Load engine module
@@ -237,59 +216,6 @@ dblab_dispatch_command() {
     # shellcheck source=/dev/null
     source "$engine_main"
 
-    # ---------------------------------------------------------
-    # DI: Export final config as environment variables
-    # ---------------------------------------------------------
-    export DBLAB_CONFIG_KEYS=("${!FINAL_CONFIG[@]}")
-    for k in "${!FINAL_CONFIG[@]}"; do
-        export "$k=${FINAL_CONFIG[$k]}"
-    done
-
-    # ----------------------------------------------
-    # Load instance.yml (if exists)
-    # ----------------------------------------------
-    if [ -n "$instance" ]; then
-        if dblab_instance_load "$engine" "$instance" INSTANCE; then
-            log_debug "Loaded existing instance.yml"
-        else
-            log_debug "No instance.yml found, treating as first 'up'"
-        fi
-    else
-        log_debug "No instance name specified; some commands may fail"
-    fi
-
-    # ----------------------------------------------
-    # Merge env-layer (core -> metadata -> env-file -> env -> CLI)
-    # ----------------------------------------------
-    # deleted
-
-    # ----------------------------------------------
-    # Validate fixed attributes (engine/version/network)
-    # ----------------------------------------------
-    # dblab_validate_fixed_attributes \
-    #     "$engine" \
-    #     "$instance" \
-    #     INSTANCE \
-    #     ENV
-
-    # ----------------------------------------------
-    # Prepare network
-    # ----------------------------------------------
-    # dblab_network_prepare "$engine" "$instance" ENV INSTANCE
-
-    # ----------------------------------------------
-    # Generate instance.yml on first up
-    # ----------------------------------------------
-    # if [ ! -f "$INSTANCE_FILE" ] && [ "$command" = "up" ]; then
-    #     dblab_instance_save "$engine" "$instance" ENV
-    #     log_debug "Generated instance.yml for new instance '$instance'"
-    # fi
-
-    # ----------------------------------------------
-    # Load engine module (main.sh)
-    # ----------------------------------------------
-    # deleted
-
     # ----------------------------------------------
     # Dispatch by command type
     # ----------------------------------------------
@@ -298,23 +224,22 @@ dblab_dispatch_command() {
             dispatch_init_command "$engine" "$instance"
             ;;
         up)
-            # engine_prepare "$engine" "$instance" ENV INSTANCE
-            # engine_validate "$engine" "$instance" ENV INSTANCE
-            # engine_before_up "$engine" "$instance" ENV INSTANCE
-            # engine_up "$engine" "$instance" ENV INSTANCE
-            # engine_after_up "$engine" "$instance" ENV INSTANCE
-
-            # Set expose environment variables if --expose is specified
-            if [[ -n "$EXPOSE_PORTS" ]]; then
-                export EXPOSE_PORTS
+            # ----------------------------------------------
+            # Generate instance.yml on first up (after validation)
+            # ----------------------------------------------
+            if [ -n "$instance" ] && ! instance_file_exists "$engine" "$instance"; then
+                instance_writer_create_initial FINAL_CONFIG META_DB_FIELDS
+                log_debug "Generated instance.yml for new instance '$instance'"
             fi
-            
-            # Use the centralized dispatcher with environment validation
-            dispatch_up_command "$engine" "$instance" "${ENV_FILES[@]}"
+
+            # engine_prepare FINCAL_CONFIG
+            # engine_validate FINCAL_CONFIG
+            # engine_before_up FINCAL_CONFIG
+            engine_up FINAL_CONFIG
+            # engine_after_up FINCAL_CONFIG
             ;;
         down)
-            # engine_down "$engine" "$instance" ENV INSTANCE
-            dispatch_simple_command "down" "$engine" "$instance"
+            engine_down FINAL_CONFIG
             ;;
         cli)
             # engine_cli "$engine" "$instance" ENV INSTANCE "${args[@]}"
@@ -329,14 +254,36 @@ dblab_dispatch_command() {
             # dblab_diag "$engine" "$instance" ENV INSTANCE
             ;;
         destroy)
-            # dblab_destroy_instance "$engine" "$instance"
-            dispatch_simple_command "destroy" "$engine" "$instance"
+            log_info "Destroying $engine instance: $instance"
+            
+            # Check if engine has destroy function
+            if declare -F "engine_destroy" >/dev/null; then
+                # Engine has destroy implementation, call it directly
+                engine_destroy FINAL_CONFIG
+            else
+                # Use default destroy implementation
+                source "${SCRIPT_DIR}/engine_defaults.sh"
+                default_engine_destroy FINAL_CONFIG
+            fi
             ;;
         status)
-            dispatch_simple_command "status" "$engine" "$instance"
+            log_info "Checking status of $engine instance: $instance"
+            
+            # Check if engine has status function
+            if declare -F "engine_status" >/dev/null; then
+                # Engine has status implementation, call it directly
+                local status
+                status=$(engine_status FINAL_CONFIG)
+                log_info "Instance $engine/$instance status: $status"
+            else
+                # Use default status implementation
+                source "${SCRIPT_DIR}/engine_defaults.sh"
+                local status
+                status=$(default_engine_status FINAL_CONFIG)
+                log_info "Instance $engine/$instance status: $status"
+            fi
             ;;
         list)
-            # dblab_list_instances "$engine"
             dispatch_list_command "$engine" "$VERBOSE_MODE"
             ;;
         *)
