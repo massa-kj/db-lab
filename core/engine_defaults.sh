@@ -13,6 +13,41 @@ source "${DEFAULTS_DIR}/runner.sh"
 source "${DEFAULTS_DIR}/instance_loader.sh"
 source "${DEFAULTS_DIR}/instance_writer.sh"
 
+default_engine_down() {
+    local -n C="$1"
+
+    local engine="${C[engine]}"
+    local instance="${C[instance]}"
+    
+    log_info "Stopping instance: $instance"
+    
+    # Initialize runner
+    init_runner
+    
+    local container_name
+    container_name=$(get_container_name "$engine" "$instance")
+
+    # Check if container is running
+    if ! container_running "$container_name"; then
+        log_info "Container is not running: $container_name"
+        return 0
+    fi
+    
+    # Stop container gracefully
+    log_info "Stopping container: $container_name"
+    stop_container "$container_name" 30  # 30 second timeout for PostgreSQL
+    
+    # Remove container
+    remove_container "$container_name"
+    
+    # Update instance state if instance exists
+    if instance_exists "$engine" "$instance"; then
+        update_state_down "$engine" "$instance"
+    fi
+    
+    log_info "PostgreSQL instance '$instance' stopped successfully"
+}
+
 # =============================================================
 # Default destroy implementation for container-based engines
 # =============================================================

@@ -239,7 +239,14 @@ dblab_dispatch_command() {
             # engine_after_up FINCAL_CONFIG
             ;;
         down)
-            engine_down FINAL_CONFIG
+            if declare -F "engine_down" >/dev/null; then
+                # Engine has down implementation, call it directly
+                engine_down FINAL_CONFIG
+            else
+                # Use default destroy implementation
+                source "${SCRIPT_DIR}/engine_defaults.sh"
+                default_engine_down FINAL_CONFIG
+            fi
             ;;
         cli)
             # engine_cli "$engine" "$instance" ENV INSTANCE "${args[@]}"

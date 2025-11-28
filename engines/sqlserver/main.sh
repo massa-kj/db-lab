@@ -323,40 +323,6 @@ sqlserver_up() {
     log_info "  Note: Use the SA password you configured"
 }
 
-# Stop SQL Server instance
-sqlserver_down() {
-    local instance="$1"
-    
-    log_info "Stopping SQL Server instance: $instance"
-    
-    # Initialize runner
-    init_runner
-    
-    local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
-    
-    # Check if container is running
-    if ! container_running "$container_name"; then
-        log_info "Container is not running: $container_name"
-        return 0
-    fi
-    
-    # Stop container gracefully
-    log_info "Stopping container: $container_name"
-    stop_container "$container_name" 60  # 60 second timeout for SQL Server
-    
-    # Remove container
-    remove_container "$container_name"
-    
-    # Update instance state if instance exists
-    if instance_exists "$ENGINE_NAME" "$instance"; then
-        update_instance_state "$ENGINE_NAME" "$instance" "last_down" ""
-        update_instance_state "$ENGINE_NAME" "$instance" "status" "stopped"
-    fi
-    
-    log_info "SQL Server instance '$instance' stopped successfully"
-}
-
 # Get SQL Server instance status
 sqlserver_status() {
     local instance="$1"
