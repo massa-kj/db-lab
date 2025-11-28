@@ -107,27 +107,6 @@ add_custom_arg() {
     add_run_arg "$@"
 }
 
-# Build and execute run command
-run_container() {
-    local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
-    if [[ -z "$runtime" ]]; then
-        die "Container runtime not initialized. Call init_runner first."
-    fi
-    
-    if [[ -z "$runtime" ]]; then
-        die "Container runtime not initialized. Call init_runner first."
-    fi
-    
-    if [[ ${#RUN_ARGS[@]} -eq 0 ]]; then
-        die "No container arguments specified"
-    fi
-    
-    local cmd=("$runtime" "run" "${RUN_ARGS[@]}")
-    
-    # Execute the command
-    "${cmd[@]}"
-}
-
 # Execute command in running container
 exec_container() {
     local container="$1"
@@ -387,24 +366,194 @@ container_health_check() {
     esac
 }
 
-# Helper function to build common container run command
-build_standard_run() {
-    local container_name="$1"
-    local image="$2"
-    local network="$3"
-    
-    reset_args
-    set_container_name "$container_name"
-    set_detached
-    add_network "$network"
-    set_image "$image"
-}
-
 # Export functions for use by other modules
 export -f init_runner reset_args add_run_arg add_exec_arg
 export -f set_container_name set_image add_env add_port add_volume add_network
 export -f set_detached set_interactive set_remove add_custom_arg
-export -f run_container exec_container stop_container remove_container
+export -f exec_container stop_container remove_container
 export -f container_exists container_running get_container_status get_container_logs
 export -f create_network remove_network network_exists list_networks list_containers
-export -f ensure_image container_health_check build_standard_run
+export -f ensure_image container_health_check
+
+#!/usr/bin/env bash
+# core/runner.sh
+#
+# Podman / Docker Abstraction Layer
+# - engine plugins only call runner_* functions
+# - all backend differences are contained within this module
+#
+# Responsibilities:
+#   - Backend determination (podman / docker / future backend)
+#   - thin wrappers for run / exec / stop / rm / logs
+#
+# Non-responsibilities:
+#   - CFG interpretation
+#   - determining network names or volume names
+#   - semantic validation
+#   - adding engine-specific options
+#
+# Dependencies:
+#   - bash 4+
+#   - podman or docker command
+
+set -euo pipefail
+
+# DBLAB_BACKEND:
+#   "auto"   : auto-detect (prioritize podman -> docker order)
+#   "podman" : forcibly use podman
+#   "docker" : forcibly use docker
+: "${DBLAB_BACKEND:=auto}"
+
+# Internal execution binary (podman / docker)
+# Set after runner_init execution
+RUNNER_BIN=""
+
+##
+## Public API List
+##
+##   runner_init
+##   runner_run IMAGE [ARGS...]
+##   runner_exec CONTAINER [COMMAND...]
+##   runner_stop CONTAINER
+##   runner_rm CONTAINER
+##   runner_logs CONTAINER [ARGS...]
+##   runner_inspect CONTAINER [ARGS...]   # optional
+##
+## All functions basically "just pass through to backend CLI".
+## Network, volumes etc. should be resolved on engine/main.sh side.
+##
+
+runner_init() {
+  # Do nothing if already initialized
+  if [[ -n "${RUNNER_BIN}" ]]; then
+    return 0
+  fi
+
+  case "${DBLAB_BACKEND}" in
+    podman)
+      _runner__use_podman
+      ;;
+    docker)
+      _runner__use_docker
+      ;;
+    auto)
+      if command -v podman >/dev/null 2>&1; then
+        _runner__use_podman
+      elif command -v docker >/dev/null 2>&1; then
+        _runner__use_docker
+      else
+        _runner__fatal "No container backend found (podman or docker required)"
+      fi
+      ;;
+    *)
+      _runner__fatal "Invalid DBLAB_BACKEND='${DBLAB_BACKEND}'. Expected: auto|podman|docker"
+      ;;
+  esac
+}
+
+##
+## Public functions
+##
+
+runner_run() {
+  runner_init
+  local image="$1"
+  shift || true
+
+  # NOTE:
+  #   - Basically just transparently pass to backend `run`.
+  #   - If there are common options to add (--tmpfs, --group-add etc.)
+  #     put them together in _runner__common_run_args.
+  #
+  # Example:
+  #   runner_run "${C[image]}" \
+  #     --name "${C[container.name]}" \
+  #     --network "${C[network.name]}" \
+  #     -e "POSTGRES_USER=${C[db.user]}" \
+  #     ...
+  #
+  
+  local common_args
+  common_args="$(_runner__common_run_args)"
+  
+  # Execute with proper argument handling
+  if [[ -n "$common_args" ]]; then
+    "$RUNNER_BIN" run $common_args "$@" "$image"
+  else
+    "$RUNNER_BIN" run "$@" "$image"
+  fi
+}
+
+runner_exec() {
+  runner_init
+  local container="$1"
+  shift || true
+
+  "$RUNNER_BIN" exec "$container" "$@"
+}
+
+runner_stop() {
+  runner_init
+  local container="$1"
+
+  "$RUNNER_BIN" stop "$container"
+}
+
+runner_rm() {
+  runner_init
+  local container="$1"
+
+  "$RUNNER_BIN" rm "$container"
+}
+
+runner_logs() {
+  runner_init
+  local container="$1"
+  shift || true
+
+  "$RUNNER_BIN" logs "$@" "$container"
+}
+
+runner_inspect() {
+  runner_init
+  local target="$1"
+  shift || true
+
+  "$RUNNER_BIN" inspect "$@" "$target"
+}
+
+##
+## Internal helpers (backend switching)
+##
+
+_runner__use_podman() {
+  if ! command -v podman >/dev/null 2>&1; then
+    _runner__fatal "podman not found in PATH, but DBLAB_BACKEND=podman"
+  fi
+  RUNNER_BIN="podman"
+}
+
+_runner__use_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    _runner__fatal "docker not found in PATH, but DBLAB_BACKEND=docker"
+  fi
+  RUNNER_BIN="docker"
+}
+
+##
+## Common option generation (extend if necessary)
+##
+## - In the future, absorb differences between `podman` and `docker` here.
+## - For example, add userns settings for rootless podman, etc.
+##
+
+_runner__common_run_args() {
+  # Currently just returns empty. In the future, add common options here.
+  # shellcheck disable=SC2086
+  printf '%s' ""
+}
+
+_runner__fatal() {
+  echo "[runner] ERROR: $*" >&2
+  exit 1
+}
