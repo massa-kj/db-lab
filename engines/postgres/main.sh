@@ -245,21 +245,6 @@ engine_up() {
     log_info "  User: ${C[db.user]}"
 }
 
-# Get PostgreSQL instance status
-postgres_status() {
-    local instance="$1"
-    
-    init_runner
-    
-    local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
-    
-    local status
-    status=$(get_container_status "$container_name")
-    
-    echo "$status"
-}
-
 # Destroy PostgreSQL instance (remove everything)
 postgres_destroy() {
     local instance="$1"

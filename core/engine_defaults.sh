@@ -258,12 +258,6 @@ _generic_cleanup() {
 default_engine_status() {
     local -n C="$1"
     
-    # Check if required fields exist
-    if [[ -z "${C[engine]:-}" ]]; then
-        log_error "Engine not found in config"
-        return 1
-    fi
-    
     local engine="${C[engine]}"
     local instance="${C[instance]}"
     
@@ -279,5 +273,4 @@ default_engine_status() {
 }
 
 # Export functions for use by engines
-export -f default_engine_destroy default_engine_status
-export -f _handle_data_removal _try_engine_specific_cleanup _generic_cleanup
+export -f default_engine_down default_engine_destroy default_engine_status

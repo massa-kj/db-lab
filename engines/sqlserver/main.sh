@@ -323,21 +323,6 @@ sqlserver_up() {
     log_info "  Note: Use the SA password you configured"
 }
 
-# Get SQL Server instance status
-sqlserver_status() {
-    local instance="$1"
-    
-    init_runner
-    
-    local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
-    
-    local status
-    status=$(get_container_status "$container_name")
-    
-    echo "$status"
-}
-
 # Destroy SQL Server instance (remove everything)
 sqlserver_destroy() {
     local instance="$1"
