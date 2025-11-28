@@ -9,27 +9,12 @@ set -euo pipefail
 POSTGRES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE_DIR="${POSTGRES_DIR}/../../core"
 source "${CORE_DIR}/lib.sh"
-source "${CORE_DIR}/env_loader.sh"
-source "${CORE_DIR}/instance_loader.sh"
 source "${CORE_DIR}/runner.sh"
 source "${CORE_DIR}/network.sh"
 source "${CORE_DIR}/validator.sh"
 
 # Engine-specific configuration
 readonly ENGINE_NAME="postgres"
-readonly METADATA_FILE="${POSTGRES_DIR}/metadata.yml"
-
-# Validate PostgreSQL-specific environment
-validate_postgres_env() {
-    log_debug "Validating PostgreSQL environment using metadata"
-    
-    # Use the new metadata-driven validation
-    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_PG_"; then
-        die "PostgreSQL environment validation failed"
-    fi
-    
-    log_debug "PostgreSQL environment validation passed"
-}
 
 # Prepare PostgreSQL container configuration
 prepare_postgres_container() {
@@ -245,37 +230,6 @@ engine_up() {
     log_info "  User: ${C[db.user]}"
 }
 
-# Main command dispatcher
-main() {
-    local command="$1"
-    local instance="$2"
-    shift 2
-    local args=("$@")
-    
-    case "$command" in
-        up)
-            postgres_up "$instance" "${args[@]}"
-            ;;
-        down)
-            postgres_down "$instance"
-            ;;
-        status)
-            postgres_status "$instance"
-            ;;
-        destroy)
-            postgres_destroy "$instance"
-            ;;
-        *)
-            die "Unknown PostgreSQL command: $command"
-            ;;
-    esac
-}
-
 # Export functions for testing
-# export -f validate_postgres_env prepare_postgres_container wait_for_postgres
-# export -f postgres_up postgres_down postgres_status postgres_destroy
-
-# Run main function if script is executed directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+export -f prepare_postgres_container wait_for_postgres
+export -f engine_up

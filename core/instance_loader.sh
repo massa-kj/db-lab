@@ -178,14 +178,6 @@ EOF
     log_info "Instance created successfully: $instance_file"
 }
 
-# Get instance configuration value
-get_instance_config() {
-    local key="$1"
-    local default="${2:-}"
-    
-    echo "${INSTANCE_CONFIG[$key]:-$default}"
-}
-
 # List all instances for an engine
 list_instances() {
     local engine="$1"
@@ -330,7 +322,7 @@ remove_instance() {
 }
 
 # Export functions for use by other modules
-export -f instance_exists get_instance_config list_instances remove_instance get_container_name get_network_name get_instance_file
+export -f instance_exists list_instances remove_instance get_container_name get_network_name get_instance_file
 
 dblab_instance_load() {
     local engine="$1"

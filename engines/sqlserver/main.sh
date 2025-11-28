@@ -9,24 +9,16 @@ set -euo pipefail
 SQLSERVER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE_DIR="${SQLSERVER_DIR}/../../core"
 source "${CORE_DIR}/lib.sh"
-source "${CORE_DIR}/env_loader.sh"
-source "${CORE_DIR}/instance_loader.sh"
 source "${CORE_DIR}/runner.sh"
 source "${CORE_DIR}/network.sh"
 source "${CORE_DIR}/validator.sh"
 
 # Engine-specific configuration
 readonly ENGINE_NAME="sqlserver"
-readonly METADATA_FILE="${SQLSERVER_DIR}/metadata.yml"
 
 # Validate SQL Server-specific environment
 validate_sqlserver_env() {
     log_debug "Validating SQL Server environment using metadata"
-    
-    # Use the new metadata-driven validation for basic checks
-    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_SQLSERVER_"; then
-        die "SQL Server environment validation failed"
-    fi
     
     # Additional SQL Server-specific password complexity validation
     local sa_password
@@ -213,10 +205,6 @@ sqlserver_up() {
     # Load environment
     load_environment "$METADATA_FILE" "${env_files[@]}"
     
-    # Validate environment against metadata requirements
-    if ! validate_env_against_metadata "$METADATA_FILE" "DBLAB_SQLSERVER_"; then
-        die "Environment validation failed"
-    fi
     validate_sqlserver_env
     
     local container_name
@@ -323,37 +311,7 @@ sqlserver_up() {
     log_info "  Note: Use the SA password you configured"
 }
 
-# Main command dispatcher
-main() {
-    local command="$1"
-    local instance="$2"
-    shift 2
-    local args=("$@")
-    
-    case "$command" in
-        up)
-            sqlserver_up "$instance" "${args[@]}"
-            ;;
-        down)
-            sqlserver_down "$instance"
-            ;;
-        status)
-            sqlserver_status "$instance"
-            ;;
-        destroy)
-            sqlserver_destroy "$instance"
-            ;;
-        *)
-            die "Unknown SQL Server command: $command"
-            ;;
-    esac
-}
-
 # Export functions for testing
 export -f validate_sqlserver_env prepare_sqlserver_container wait_for_sqlserver
-export -f create_initial_database sqlserver_up sqlserver_down sqlserver_status sqlserver_destroy
-
-# Run main function if script is executed directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    main "$@"
-fi
+export -f create_initial_database sqlserver_up
+export -f engine_up

@@ -139,9 +139,6 @@ _apply_validation_rules() {
     [[ "$validation_failed" != "true" ]]
 }
 
-# Export functions for use by other modules
-export -f validate_env_against_metadata
-
 #!/usr/bin/env bash
 set -euo pipefail
 
