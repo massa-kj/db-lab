@@ -54,16 +54,12 @@ generate_template:
     - DBLAB_PG_DATABASE
     - DBLAB_EPHEMERAL
 
-# Duplicated
 instance_fields:
-  db.user:
-    required: true
-  db.password:
-    required: true
-  db.database:
-    required: true
-  db.port:
-    required: true
+  fixed:
+    - "db.user"
+    - "db.password"
+    - "db.database"
+    - "db.port"
 
 env_vars:
   - name: DBLAB_PG_IMAGE

@@ -125,20 +125,7 @@ instance_writer_create_initial() {
     fi
     inst[created]="$(_now_iso)"
 
-    # TODO: Fundamental revision needed for field_names extraction part
-    # --- db.* (Engine-specific differences are delegated to db_fields defined in metadata.yml) ---
-    # db_fields is META_DB_FIELDS, with keys in format like "db.user.required"
-    # Extract field names (like "db.user")
-    declare -A field_names=()
-    for key in "${!db_fields[@]}"; do
-        # Extract "db.user" from "db.user.required"
-        if [[ "$key" =~ ^([^.]+\.[^.]+)\..* ]]; then
-            field_names["${BASH_REMATCH[1]}"]=1
-        fi
-    done
-    
-    for field in "${!field_names[@]}"; do
-        # field is field names like "db.user" "db.password" ...
+    for field in "${db_fields[@]}"; do
         if [[ -n "${cfg[$field]+_}" ]]; then
             inst["$field"]="${cfg[$field]}"
         else

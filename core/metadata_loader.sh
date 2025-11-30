@@ -108,10 +108,10 @@ metadata_load() {
     fi
 
     # ---------------------------------------------------------
-    # 
+    # 5. Load instance_fields.fixed array
     # ---------------------------------------------------------
-    declare -gA META_DB_FIELDS=()
-    yaml_get_object OUT_META "instance_fields" META_DB_FIELDS
+    declare -ga META_DB_FIELDS=()
+    yaml_get_array OUT_META "instance_fields.fixed" META_DB_FIELDS || true
 
     # ---------------------------------------------------------
     # 6. Load env_vars array (for env-template generation)
