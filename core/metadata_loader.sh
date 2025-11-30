@@ -42,14 +42,15 @@ metadata_load() {
     log_debug "[metadata] loading: $metadata_path"
 
     # ---------------------------------------------------------
-    # 1. Parse entire YAML and expand into OUT_META
+    # Parse entire YAML and expand into OUT_META
     # ---------------------------------------------------------
     yaml_parse_file "$metadata_path" OUT_META
 
     # Required key validation
     _metadata_assert_key OUT_META "engine"
-    _metadata_assert_key OUT_META "required_env"
+    _metadata_assert_key OUT_META "env_vars"
     _metadata_assert_key OUT_META "defaults"
+    _metadata_assert_key OUT_META "instance_fields"
 
     # Engine name consistency check
     if [[ "${OUT_META[engine]}" != "$engine" ]]; then
@@ -57,7 +58,7 @@ metadata_load() {
     fi
 
     # ---------------------------------------------------------
-    # 2. Extract defaults section
+    # Extract defaults section
     # ---------------------------------------------------------
     for key in "${!OUT_META[@]}"; do
         if [[ "$key" == defaults.* ]]; then
@@ -66,16 +67,38 @@ metadata_load() {
         fi
     done
 
+    # ---------------------------------------------------------
+    # Load env_vars array (for env-template generation)
+    # ---------------------------------------------------------
+    declare -gA META_ENV_VARS=()
+    
+    # Extract all env_vars[*] keys directly from OUT_META
+    for key in "${!OUT_META[@]}"; do
+        if [[ "$key" == env_vars\[*\]* ]]; then
+            # Copy env_vars keys directly to META_ENV_VARS
+            META_ENV_VARS["$key"]="${OUT_META[$key]}"
+        fi
+    done
 
     # ---------------------------------------------------------
-    # 3. Get required_env (list)
+    # Get required_env (list)
     # ---------------------------------------------------------
     declare -ga META_REQUIRED_ENV=()
-    yaml_get_array OUT_META "required_env" META_REQUIRED_ENV
 
-    if ((${#META_REQUIRED_ENV[@]} == 0)); then
-        log_error "metadata.yml: required_env must not be empty"
-    fi
+    # Count the number of env_vars elements
+    count=0
+    for key in "${!META_ENV_VARS[@]}"; do
+        [[ "$key" =~ ^env_vars\[[0-9]+\]\.name$ ]] && count=$((count + 1))
+    done
+
+    # Add only if env_vars[$i].required exists and is true
+    for ((i=0; i<count; i++)); do
+        local required_key="env_vars[$i].required"
+        if [[ "${META_ENV_VARS[$required_key]:-}" == "true" ]]; then
+            local name_key="env_vars[$i].name"
+            META_REQUIRED_ENV+=("${META_ENV_VARS[$name_key]}")
+        fi
+    done
 
     # ---------------------------------------------------------
     # 4. Load version.supported (optional)
@@ -112,19 +135,6 @@ metadata_load() {
     # ---------------------------------------------------------
     declare -ga META_DB_FIELDS=()
     yaml_get_array OUT_META "instance_fields.fixed" META_DB_FIELDS || true
-
-    # ---------------------------------------------------------
-    # 6. Load env_vars array (for env-template generation)
-    # ---------------------------------------------------------
-    declare -gA META_ENV_VARS=()
-    
-    # Extract all env_vars[*] keys directly from OUT_META
-    for key in "${!OUT_META[@]}"; do
-        if [[ "$key" == env_vars\[*\]* ]]; then
-            # Copy env_vars keys directly to META_ENV_VARS
-            META_ENV_VARS["$key"]="${OUT_META[$key]}"
-        fi
-    done
 
     log_debug "[metadata] loaded: engine=$engine required_env=${#META_REQUIRED_ENV[@]} defaults=${#OUT_DEFAULTS[@]}"
 }

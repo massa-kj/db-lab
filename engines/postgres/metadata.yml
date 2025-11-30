@@ -17,10 +17,6 @@ supported:
   - "14"
   - "13"
 
-# Duplicated
-required_env:
-  - DBLAB_PG_PASSWORD
-
 defaults:
   db.version: "16"
   db.user: "postgres"
