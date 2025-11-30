@@ -174,7 +174,7 @@ dblab_dispatch_command() {
     # ---------------------------------------------------------
     # Load environment variables
     # ---------------------------------------------------------
-    env_load "$engine" ENV_FILES META_ENV_MAP ENV_RUNTIME
+    env_load "$engine" ENV_FILES ENV_RUNTIME
 
     # ---------------------------------------------------------
     # Merge layers

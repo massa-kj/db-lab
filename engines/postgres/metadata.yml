@@ -65,24 +65,6 @@ instance_fields:
   db.port:
     required: true
 
-# Duplicated
-# Items that can be edited in the env file
-env_map:
-  DBLAB_PG_IMAGE: image
-  DBLAB_PG_USER: db.user
-  DBLAB_PG_VERSION: db.version
-  DBLAB_PG_DATABASE: db.database
-  DBLAB_PG_PORT: db.port
-  DBLAB_PG_PASSWORD: db.password
-  # DBLAB_NETWORK_NAME: network.name
-  DBLAB_STORAGE_DATA_DIR: storage.data_dir
-  DBLAB_STORAGE_CONFIG_DIR: storage.config_dir
-  DBLAB_STORAGE_LOG_DIR: storage.log_dir
-
-  DBLAB_NETWORK_MODE: network.mode
-  DBLAB_EXPOSE_ENABLED: runtime.expose.enabled
-  DBLAB_EPHEMERAL: storage.persistent
-
 env_vars:
   - name: DBLAB_PG_IMAGE
     map: image

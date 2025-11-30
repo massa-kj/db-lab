@@ -63,8 +63,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 env_load() {
     local engine="$1"
     local -n env_files="$2"
-    local -n env_map_ref="$3"
-    local -n OUT_ENV="$4"       # Output: env-runtime assoc
+    local -n OUT_ENV="$3"       # Output: env-runtime assoc
 
     log_debug "[env] load for engine=$engine"
 
@@ -84,7 +83,7 @@ env_load() {
     _env_apply_os_env env_raw
 
     # 3. Normalize to internal keys
-    _normalize env_raw env_map_ref OUT_ENV
+    _normalize env_raw OUT_ENV
 
     # 3. Static check of required_env
     # _env_check_required merged
@@ -144,8 +143,7 @@ _load_runtime_env() {
 # ---------------------------------------------------------
 _normalize() {
     local -n raw="$1"
-    local -n env_map="$2"
-    local -n out="$3"
+    local -n out="$2"
 
     # Count the number of env_vars elements
     count=0

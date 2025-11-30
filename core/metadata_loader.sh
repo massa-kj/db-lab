@@ -111,7 +111,6 @@ metadata_load() {
     # 
     # ---------------------------------------------------------
     declare -gA META_DB_FIELDS=()
-    declare -gA META_ENV_MAP=()
     yaml_get_object OUT_META "instance_fields" META_DB_FIELDS
 
     # ---------------------------------------------------------
