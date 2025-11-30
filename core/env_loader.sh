@@ -147,13 +147,21 @@ _normalize() {
     local -n env_map="$2"
     local -n out="$3"
 
+    # Count the number of env_vars elements
+    count=0
+    for key in "${!META_ENV_VARS[@]}"; do
+        [[ "$key" =~ ^env_vars\[[0-9]+\]\.name$ ]] && count=$((count + 1))
+    done
+
     local key
     for key in "${!raw[@]}"; do
-        # Ignore keys not in env_map (environment variables not handled by this engine)
-        if [[ -n "${env_map[$key]+_}" ]]; then
-            local internal="${env_map[$key]}"
-            out["$internal"]="${raw[$key]}"
-        fi
+        # Map to internal key using META_ENV_VARS
+        for ((i=0; i<count; i++)); do
+            if ([[ "$key" == "${META_ENV_VARS[env_vars[$i].name]}" ]]); then
+                local internal="${META_ENV_VARS[env_vars[$i].map]}"
+                out["$internal"]="${raw[$key]}"
+            fi
+        done
     done
 }
 

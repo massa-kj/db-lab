@@ -159,16 +159,62 @@ yaml_parse_file() {
             value="${value%\"}"; value="${value#\"}"
             value="${value%\'}"; value="${value#\'}"
 
-            # Truncate context_stack to current level and set key there
-            context_stack=( "${context_stack[@]:0:$level}" )
-            context_stack[$level]="$key"
+            # Check if we're inside an array element (context_stack contains numeric index)
+            local is_in_array=false
+            local array_parent_key=""
+            local array_index=""
+            
+            # Look for numeric array index in context stack
+            for ((i=0; i<${#context_stack[@]}; i++)); do
+                if [[ "${context_stack[$i]}" =~ ^[0-9]+$ ]]; then
+                    is_in_array=true
+                    array_index="${context_stack[$i]}"
+                    # Build parent key from elements before the array index
+                    if (( i > 0 )); then
+                        array_parent_key="$(IFS=.; echo "${context_stack[*]:0:$i}")"
+                    fi
+                    break
+                fi
+            done
 
-            # Generate flat key: version.default, defaults.DBLAB_PG_USER etc
-            local flat_key
-            flat_key="$(IFS=.; echo "${context_stack[*]}")"
+            if [[ "$is_in_array" == "true" ]]; then
+                # We're inside an array element, set key as property of array element
+                if [[ -n "$array_parent_key" ]]; then
+                    YAML_REF["${array_parent_key}[${array_index}].${key}"]="$value"
+                    log_debug "Set YAML_REF[${array_parent_key}[${array_index}].${key}]=$value"
+                else
+                    # Top-level array
+                    local top_parent="${context_stack[0]}"
+                    YAML_REF["${top_parent}[${array_index}].${key}"]="$value"
+                    log_debug "Set YAML_REF[${top_parent}[${array_index}].${key}]=$value"
+                fi
+                
+                # Update array index when we encounter the first property
+                local parent_for_index
+                if [[ -n "$array_parent_key" ]]; then
+                    parent_for_index="$array_parent_key"
+                else
+                    parent_for_index="${context_stack[0]}"
+                fi
+                
+                # Only increment index if this is the first property we've seen for this array element
+                if [[ -z "${YAML_INDEX["${parent_for_index}.${array_index}.first"]:-}" ]]; then
+                    YAML_INDEX["${parent_for_index}.${array_index}.first"]="true"
+                    YAML_INDEX["$parent_for_index"]=$(( array_index + 1 ))
+                fi
+            else
+                # Normal key-value pair, not in an array
+                # Truncate context_stack to current level and set key there
+                context_stack=( "${context_stack[@]:0:$level}" )
+                context_stack[$level]="$key"
 
-            YAML_REF["$flat_key"]="$value"
-            log_debug "Set YAML_REF[$flat_key]=$value"
+                # Generate flat key: version.default, defaults.DBLAB_PG_USER etc
+                local flat_key
+                flat_key="$(IFS=.; echo "${context_stack[*]}")"
+
+                YAML_REF["$flat_key"]="$value"
+                log_debug "Set YAML_REF[$flat_key]=$value"
+            fi
             continue
         fi
 
@@ -185,13 +231,10 @@ yaml_parse_file() {
         fi
 
         # -------------------------------
-        # 3. Array element "- value"
+        # 3. Array element "- value" or "- key: value"
         # -------------------------------
         if [[ "$text" =~ ^-[[:space:]]*(.*)$ ]]; then
-            local value="${BASH_REMATCH[1]}"
-
-            value="${value%\"}"; value="${value#\"}"
-            value="${value%\'}"; value="${value#\'}"
+            local remaining="${BASH_REMATCH[1]}"
 
             # Array parent key is one level up
             local parent_level=$(( level - 1 ))
@@ -205,10 +248,41 @@ yaml_parse_file() {
             # Get next index from YAML_INDEX (default to 0 if not found)
             local idx="${YAML_INDEX[$parent_key]:-0}"
 
-            # Example: "version.supported[0]" = "16"
-            YAML_REF["${parent_key}[${idx}]"]="$value"
-            YAML_INDEX["$parent_key"]=$(( idx + 1 ))
-            log_debug "Set YAML_REF[${parent_key}[${idx}]]=$value"
+            # Check if this is "- key: value" (array of objects)
+            if [[ "$remaining" =~ ^([A-Za-z0-9_.-]+):[[:space:]]*(.+)$ ]]; then
+                local key="${BASH_REMATCH[1]}"
+                local value="${BASH_REMATCH[2]}"
+
+                # Remove quotes from value
+                value="${value%\"}"; value="${value#\"}"
+                value="${value%\'}"; value="${value#\'}"
+
+                # Set the key-value pair for this array element
+                YAML_REF["${parent_key}[${idx}].${key}"]="$value"
+                log_debug "Set YAML_REF[${parent_key}[${idx}].${key}]=$value"
+
+                # Update context stack to include array element
+                context_stack=( "${context_stack[@]:0:$parent_level+1}" )
+                context_stack[$level]="$idx"
+
+            elif [[ "$remaining" =~ ^[[:space:]]*$ ]]; then
+                # Empty array element (just "- "), prepare for nested properties
+                context_stack=( "${context_stack[@]:0:$parent_level+1}" )
+                context_stack[$level]="$idx"
+                # Don't increment index yet - will be done when we encounter the first property
+
+            else
+                # Simple array element "- value"
+                local value="$remaining"
+                value="${value%\"}"; value="${value#\"}"
+                value="${value%\'}"; value="${value#\'}"
+
+                YAML_REF["${parent_key}[${idx}]"]="$value"
+                log_debug "Set YAML_REF[${parent_key}[${idx}]]=$value"
+                
+                # Increment index for next array element
+                YAML_INDEX["$parent_key"]=$(( idx + 1 ))
+            fi
 
             continue
         fi

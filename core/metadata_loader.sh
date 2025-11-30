@@ -59,22 +59,10 @@ metadata_load() {
     # ---------------------------------------------------------
     # 2. Extract defaults section
     # ---------------------------------------------------------
-    # if yaml_get_object OUT_META "defaults" OUT_DEFAULTS; then
-    #     :
-    # else
-    #     log_error "metadata.yml missing defaults section"
-    # fi
-    declare -gA META_DEFAULT_MAP=()
-    yaml_get_object OUT_META "defaults_map" META_DEFAULT_MAP
     for key in "${!OUT_META[@]}"; do
         if [[ "$key" == defaults.* ]]; then
             local meta_def_key="${key#defaults.}"
-
-            # If it does not exist in defaults_map, it is ignored (value not handled by this engine).
-            if [[ -n "${META_DEFAULT_MAP[$meta_def_key]+_}" ]]; then
-                local internal_key="${META_DEFAULT_MAP[$meta_def_key]}"
-                OUT_DEFAULTS["$internal_key"]="${OUT_META[$key]}"
-            fi
+            OUT_DEFAULTS["$meta_def_key"]="${OUT_META[$key]}"
         fi
     done
 
@@ -96,10 +84,10 @@ metadata_load() {
     yaml_get_array OUT_META "version.supported" META_SUPPORTED_VERSIONS || true
 
     # Validation for version section
-    if yaml_key_exists OUT_META "version"; then
-        _metadata_assert_key OUT_META "version.supported";
-        _metadata_assert_key OUT_META "version.default";
-    fi
+    # if yaml_key_exists OUT_META "version"; then
+    #     _metadata_assert_key OUT_META "version.supported";
+    #     _metadata_assert_key OUT_META "version.default";
+    # fi
 
     # ---------------------------------------------------------
     # 5. Load generate_template (for env-template)
@@ -126,7 +114,18 @@ metadata_load() {
     declare -gA META_ENV_MAP=()
     yaml_get_object OUT_META "instance_fields" META_DB_FIELDS
 
-    yaml_get_object OUT_META "env_map" META_ENV_MAP
+    # ---------------------------------------------------------
+    # 6. Load env_vars array (for env-template generation)
+    # ---------------------------------------------------------
+    declare -gA META_ENV_VARS=()
+    
+    # Extract all env_vars[*] keys directly from OUT_META
+    for key in "${!OUT_META[@]}"; do
+        if [[ "$key" == env_vars\[*\]* ]]; then
+            # Copy env_vars keys directly to META_ENV_VARS
+            META_ENV_VARS["$key"]="${OUT_META[$key]}"
+        fi
+    done
 
     log_debug "[metadata] loaded: engine=$engine required_env=${#META_REQUIRED_ENV[@]} defaults=${#OUT_DEFAULTS[@]}"
 }

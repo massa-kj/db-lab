@@ -1,38 +1,45 @@
 # PostgreSQL engine metadata
 engine: postgres
+kind: database
+display_name: "PostgreSQL"
 
-version:
-  default: "16"
-  supported:
-    - "16"
-    - "15"
-    - "14"
-    - "13"
+# Duplicated
+# version:
+#   default: "16"
+#   supported:
+#     - "16"
+#     - "15"
+#     - "14"
+#     - "13"
+supported:
+  - "16"
+  - "15"
+  - "14"
+  - "13"
 
+# Duplicated
 required_env:
-  - DBLAB_PG_VERSION
-  - DBLAB_PG_USER
   - DBLAB_PG_PASSWORD
-  - DBLAB_PG_DATABASE
 
 defaults:
-  DBLAB_PG_VERSION: "16"
-  DBLAB_PG_USER: "postgres"
-  DBLAB_PG_DATABASE: "app"
-  DBLAB_PG_PORT: "5432"
-  DBLAB_EPHEMERAL: false
-  DBLAB_NETWORK_MODE: "isolated"
-  DBLAB_EXPOSE_ENABLED: false
-  # DBLAB_NETWORK_NAME: "dblab_{instance}_isolated"
-  DBLAB_STORAGE_DATA_DIR: "{XDG_DATA_HOME}/dblab/postgres/{instance}/data"
-  DBLAB_STORAGE_CONFIG_DIR: "{XDG_DATA_HOME}/dblab/postgres/{instance}/config"
-  DBLAB_STORAGE_LOG_DIR: "{XDG_DATA_HOME}/dblab/postgres/{instance}/logs"
-  DBLAB_PG_IMAGE: "postgres:{db.version}"
+  db.version: "16"
+  db.user: "postgres"
+  db.database: "app"
+  db.port: "5432"
+  storage.persistent: false
+  network.mode: "isolated" # core で補完
+  runtime.expose.enabled: false
+  # network.name: "dblab_{instance}_isolated"
+  storage.data_dir: "{XDG_DATA_HOME}/dblab/postgres/{instance}/data"
+  storage.config_dir: "{XDG_DATA_HOME}/dblab/postgres/{instance}/config"
+  storage.log_dir: "{XDG_DATA_HOME}/dblab/postgres/{instance}/logs"
+  image: "postgres:{db.version}"
 
 validation:
   user_regex: "^[a-zA-Z0-9_]+$"
   dbname_regex: "^[a-zA-Z0-9_]+$"
 
+# Duplicated
 generate_template:
   comments:
     DBLAB_PG_VERSION: "Image tag (ex: 16, 16-alpine)"
@@ -46,6 +53,8 @@ generate_template:
     - DBLAB_PG_PASSWORD
     - DBLAB_PG_DATABASE
     - DBLAB_EPHEMERAL
+
+# Duplicated
 instance_fields:
   db.user:
     required: true
@@ -55,7 +64,11 @@ instance_fields:
     required: true
   db.port:
     required: true
+
+# Duplicated
+# Items that can be edited in the env file
 env_map:
+  DBLAB_PG_IMAGE: image
   DBLAB_PG_USER: db.user
   DBLAB_PG_VERSION: db.version
   DBLAB_PG_DATABASE: db.database
@@ -65,26 +78,50 @@ env_map:
   DBLAB_STORAGE_DATA_DIR: storage.data_dir
   DBLAB_STORAGE_CONFIG_DIR: storage.config_dir
   DBLAB_STORAGE_LOG_DIR: storage.log_dir
-  DBLAB_PG_IMAGE: image
 
   DBLAB_NETWORK_MODE: network.mode
   DBLAB_EXPOSE_ENABLED: runtime.expose.enabled
   DBLAB_EPHEMERAL: storage.persistent
-defaults_map:
-  DBLAB_PG_USER: db.user
-  DBLAB_PG_VERSION: db.version
-  DBLAB_PG_DATABASE: db.database
-  DBLAB_PG_PORT: db.port
-  DBLAB_PG_PASSWORD: db.password
-  # DBLAB_NETWORK_NAME: network.name
-  DBLAB_STORAGE_DATA_DIR: storage.data_dir
-  DBLAB_STORAGE_CONFIG_DIR: storage.config_dir
-  DBLAB_STORAGE_LOG_DIR: storage.log_dir
-  DBLAB_PG_IMAGE: image
 
-  DBLAB_NETWORK_MODE: network.mode
-  DBLAB_EXPOSE_ENABLED: runtime.expose.enabled
-  DBLAB_EPHEMERAL: storage.persistent
+env_vars:
+  - name: DBLAB_PG_IMAGE
+    map: image
+    description: "Docker image for PostgreSQL"
+  - name: DBLAB_PG_USER
+    map: db.user
+    description: "Database user"
+  - name: DBLAB_PG_PASSWORD
+    map: db.password
+    description: "Database password"
+    required: true
+  - name: DBLAB_PG_DATABASE
+    map: db.database
+    description: "Database name"
+  - name: DBLAB_PG_PORT
+    map: db.port
+    description: "Port for PostgreSQL"
+  - name: DBLAB_PG_VERSION
+    map: db.version
+    description: "PostgreSQL version tag (ex: 16, 16-alpine)"
+  - name: DBLAB_NETWORK_MODE
+    map: network.mode
+    description: "Network mode for the container"
+  - name: DBLAB_EXPOSE_ENABLED
+    map: runtime.expose.enabled
+    description: "Whether to expose the database port"
+  - name: DBLAB_EPHEMERAL
+    map: storage.persistent
+    description: "If true, data is not persisted" 
+  - name: DBLAB_STORAGE_DATA_DIR
+    map: storage.data_dir
+    description: "Data directory for PostgreSQL"
+  - name: DBLAB_STORAGE_CONFIG_DIR
+    map: storage.config_dir
+    description: "Config directory for PostgreSQL"
+  - name: DBLAB_STORAGE_LOG_DIR
+    map: storage.log_dir
+    description: "Log directory for PostgreSQL"
+
 cli_map:
   --user: db.user
   --password: db.password
