@@ -70,7 +70,7 @@ test_instance_writer_create_initial() {
     declare -A TEST_CFG=(
         [engine]="postgres"
         [instance]="testdb"
-        [version]="16"
+        [db.version]="16"
         [image]="postgres:16"
         [db.user]="testuser"
         [db.password]="testpass"

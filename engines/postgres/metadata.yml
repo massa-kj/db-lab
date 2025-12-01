@@ -3,14 +3,6 @@ engine: postgres
 kind: database
 display_name: "PostgreSQL"
 
-# Duplicated
-# version:
-#   default: "16"
-#   supported:
-#     - "16"
-#     - "15"
-#     - "14"
-#     - "13"
 supported:
   - "16"
   - "15"
@@ -34,21 +26,6 @@ defaults:
 validation:
   user_regex: "^[a-zA-Z0-9_]+$"
   dbname_regex: "^[a-zA-Z0-9_]+$"
-
-# Duplicated
-generate_template:
-  comments:
-    DBLAB_PG_VERSION: "Image tag (ex: 16, 16-alpine)"
-    DBLAB_PG_USER: "Initial admin user"
-    DBLAB_PG_PASSWORD: "Initial password"
-    DBLAB_PG_DATABASE: "Initial database name"
-    DBLAB_EPHEMERAL: "If true, data is not persisted"
-  order:
-    - DBLAB_PG_VERSION
-    - DBLAB_PG_USER
-    - DBLAB_PG_PASSWORD
-    - DBLAB_PG_DATABASE
-    - DBLAB_EPHEMERAL
 
 instance_fields:
   fixed:

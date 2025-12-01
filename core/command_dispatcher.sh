@@ -17,7 +17,6 @@ source "${SCRIPT_DIR}/env_loader.sh"
 source "${SCRIPT_DIR}/merge_layers.sh"
 source "${SCRIPT_DIR}/config_interpolator.sh"
 source "${SCRIPT_DIR}/validator.sh"
-source "${SCRIPT_DIR}/instance_writer.sh"
 
 # =============================================================
 # Core dispatcher functions  
@@ -77,27 +76,6 @@ dispatch_up_command() {
     
     # Execute the up command
     # dispatch_engine_command "up" "$engine" "$instance" "${env_files[@]}"
-}
-
-# Execute init command with template generation
-dispatch_init_command() {
-    local engine="$1" 
-    local instance="$2"
-    
-    log_info "Generating template environment file for $engine instance: $instance"
-    
-    # Get engine metadata path
-    local project_dir="$(dirname "$SCRIPT_DIR")"
-    local engines_dir="${project_dir}/engines"
-    local metadata_file="${engines_dir}/${engine}/metadata.yml"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        die "Engine metadata not found: $metadata_file"
-    fi
-    
-    # Source and call template generation
-    source "${SCRIPT_DIR}/env_template.sh"
-    generate_env_template "$engine" "$instance" "$metadata_file"
 }
 
 # Execute list command with enhanced functionality
@@ -221,12 +199,14 @@ dblab_dispatch_command() {
     # ----------------------------------------------
     case "$command" in
         init)
-            dispatch_init_command "$engine" "$instance"
+            source "${SCRIPT_DIR}/env_template.sh"
+            generate_env_template FINAL_CONFIG
             ;;
         up)
             # ----------------------------------------------
             # Generate instance.yml on first up (after validation)
             # ----------------------------------------------
+            source "${SCRIPT_DIR}/instance_writer.sh"
             if [ -n "$instance" ] && ! instance_file_exists "$engine" "$instance"; then
                 instance_writer_create_initial FINAL_CONFIG META_DB_FIELDS
                 log_debug "Generated instance.yml for new instance '$instance'"

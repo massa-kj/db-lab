@@ -95,7 +95,7 @@ metadata_load() {
     for ((i=0; i<count; i++)); do
         local required_key="env_vars[$i].required"
         if [[ "${META_ENV_VARS[$required_key]:-}" == "true" ]]; then
-            local name_key="env_vars[$i].name"
+            ocal name_key="env_vars[$i].name"
             META_REQUIRED_ENV+=("${META_ENV_VARS[$name_key]}")
         fi
     done
@@ -104,23 +104,11 @@ metadata_load() {
     # 4. Load version.supported (optional)
     # ---------------------------------------------------------
     declare -ga META_SUPPORTED_VERSIONS=()
-    yaml_get_array OUT_META "version.supported" META_SUPPORTED_VERSIONS || true
-
-    # Validation for version section
-    # if yaml_key_exists OUT_META "version"; then
-    #     _metadata_assert_key OUT_META "version.supported";
-    #     _metadata_assert_key OUT_META "version.default";
-    # fi
+    yaml_get_array OUT_META "supported" META_SUPPORTED_VERSIONS || true
 
     # ---------------------------------------------------------
-    # 5. Load generate_template (for env-template)
+    # 
     # ---------------------------------------------------------
-    declare -ga META_TEMPLATE_ORDER=()
-    declare -gA META_TEMPLATE_COMMENTS=()
-
-    yaml_get_array OUT_META "generate_template.order" META_TEMPLATE_ORDER || true
-    yaml_get_object OUT_META "generate_template.comments" META_TEMPLATE_COMMENTS || true
-
     # Validation for cli.args array
     if yaml_key_exists OUT_META "cli"; then
         if yaml_key_exists OUT_META "cli.args"; then
