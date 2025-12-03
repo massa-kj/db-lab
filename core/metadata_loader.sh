@@ -95,7 +95,7 @@ metadata_load() {
     for ((i=0; i<count; i++)); do
         local required_key="env_vars[$i].required"
         if [[ "${META_ENV_VARS[$required_key]:-}" == "true" ]]; then
-            ocal name_key="env_vars[$i].name"
+            local name_key="env_vars[$i].name"
             META_REQUIRED_ENV+=("${META_ENV_VARS[$name_key]}")
         fi
     done

@@ -16,64 +16,6 @@ source "${CORE_DIR}/validator.sh"
 # Engine-specific configuration
 readonly ENGINE_NAME="postgres"
 
-# Prepare PostgreSQL container configuration
-prepare_postgres_container() {
-    local instance="$1"
-    local network_name="$2"
-    local data_dir="$3"
-    
-    log_debug "Preparing PostgreSQL container configuration"
-    
-    # Get configuration
-    version=$(get_env "DBLAB_PG_VERSION")
-    user=$(get_env "DBLAB_PG_USER")
-    password=$(get_env "DBLAB_PG_PASSWORD")
-    database=$(get_env "DBLAB_PG_DATABASE")
-    port=$(get_env "DBLAB_PG_PORT" "5432")
-
-    local image="postgres:${version}"
-    local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
-    
-    # Reset and configure runner
-    reset_args
-    set_container_name "$container_name"
-    set_detached
-    add_network "$network_name"
-    
-    # PostgreSQL environment variables
-    add_env "POSTGRES_USER" "$user"
-    add_env "POSTGRES_PASSWORD" "$password"
-    add_env "POSTGRES_DB" "$database"
-    
-    # Data volume mount
-    add_volume "${data_dir}:/var/lib/postgresql/data"
-    
-    # Expose port if specified
-    local expose_enabled
-    expose_enabled=$(get_env "DBLAB_EXPOSE_ENABLED" "false")
-    
-    if [[ "$expose_enabled" == "true" ]]; then
-        local expose_ports
-        expose_ports=$(get_env "DBLAB_EXPOSE_PORTS" "")
-        
-        if [[ -n "$expose_ports" ]]; then
-            # If port is specified without host port (e.g., "5432"), 
-            # map it to the same host port (e.g., "5432:5432")
-            if [[ "$expose_ports" =~ ^[0-9]+$ ]]; then
-                expose_ports="${expose_ports}:${expose_ports}"
-                log_debug "Expanded port mapping to: $expose_ports"
-            fi
-            add_port "$expose_ports"
-        fi
-    fi
-    
-    # Set image last
-    set_image "$image"
-    
-    log_debug "PostgreSQL container configuration prepared"
-}
-
 # Wait for PostgreSQL to be ready
 wait_for_postgres() {
     local container_name="$1"
@@ -231,5 +173,5 @@ engine_up() {
 }
 
 # Export functions for testing
-export -f prepare_postgres_container wait_for_postgres
+export -f wait_for_postgres
 export -f engine_up

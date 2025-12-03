@@ -58,76 +58,12 @@ get_sqlcmd_path() {
     fi
 }
 
-# Prepare SQL Server container configuration
-prepare_sqlserver_container() {
-    local instance="$1"
-    local network_name="$2"
-    local data_dir="$3"
-    
-    log_debug "Preparing SQL Server container configuration"
-    
-    # Get configuration
-    version=$(get_env "DBLAB_SQLSERVER_VERSION")
-    sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
-    database=$(get_env "DBLAB_SQLSERVER_DATABASE")
-    mssql_pid=$(get_env "DBLAB_SQLSERVER_PID" "Express")
-    port=$(get_env "DBLAB_SQLSERVER_PORT" "1433")
-    
-    local image="mcr.microsoft.com/mssql/server:${version}"
-    local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
-    
-    # Reset and configure runner
-    reset_args
-    set_container_name "$container_name"
-    set_detached
-    add_network "$network_name"
-    
-    # SQL Server environment variables
-    add_env "ACCEPT_EULA" "Y"
-    add_env "MSSQL_SA_PASSWORD" "$sa_password"
-    add_env "MSSQL_PID" "$mssql_pid"
-    add_env "MSSQL_TCP_PORT" "$port"
-    
-    # Data volume mount with proper permissions
-    add_volume "${data_dir}:/var/opt/mssql"
-    
-    # Set memory limit (SQL Server requires at least 2GB)
-    add_custom_arg "--memory=2g"
-    
-    # Add security and privilege settings
-    add_custom_arg "--user=0:0" # Run as root to avoid permission issues
-    add_custom_arg "--privileged=true" # Give elevated privileges
-    
-    # Expose port if specified
-    local expose_enabled
-    expose_enabled=$(get_env "DBLAB_EXPOSE_ENABLED" "false")
-    
-    if [[ "$expose_enabled" == "true" ]]; then
-        local expose_ports
-        expose_ports=$(get_env "DBLAB_EXPOSE_PORTS" "")
-        
-        if [[ -n "$expose_ports" ]]; then
-            # If port is specified without host port (e.g., "1433"), 
-            # map it to the same host port (e.g., "1433:1433")
-            if [[ "$expose_ports" =~ ^[0-9]+$ ]]; then
-                expose_ports="${expose_ports}:${expose_ports}"
-                log_debug "Expanded port mapping to: $expose_ports"
-            fi
-            add_port "$expose_ports"
-        fi
-    fi
-    
-    # Set image last
-    set_image "$image"
-    
-    log_debug "SQL Server container configuration prepared"
-}
-
 # Wait for SQL Server to be ready
 wait_for_sqlserver() {
     local container_name="$1"
     local max_attempts="${2:-60}"  # SQL Server takes longer to start
+    local sa_password="${3:-}"
+    local version="${4:-}"
     local attempt=1
     
     log_info "Waiting for SQL Server to be ready (this may take a few minutes)..."
@@ -137,8 +73,8 @@ wait_for_sqlserver() {
         
         # Use sqlcmd to check SQL Server readiness
         local sa_password version sqlcmd_path
-        sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
-        version=$(get_env "DBLAB_SQLSERVER_VERSION")
+        # sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
+        # version=$(get_env "DBLAB_SQLSERVER_VERSION")
         sqlcmd_path=$(get_sqlcmd_path "$version")
 
         if exec_container "$container_name" "$sqlcmd_path" \
@@ -157,58 +93,22 @@ wait_for_sqlserver() {
     return 1
 }
 
-# Create initial database
-create_initial_database() {
-    local container_name="$1"
-    local database="$2"
-    local sa_password="$3"
-    
-    log_info "Creating initial database: $database"
-    
-    # Check if database already exists
-    local db_exists version sqlcmd_path
-    version=$(get_env "DBLAB_SQLSERVER_VERSION")
-    sqlcmd_path=$(get_sqlcmd_path "$version")
-
-    db_exists=$(exec_container "$container_name" "$sqlcmd_path" \
-        -C -S localhost -U sa -P "$sa_password" \
-        -Q "SELECT DB_ID('$database')" -h -1 -W 2>/dev/null | tr -d '[:space:]' || echo "")
-    
-    if [[ "$db_exists" != "NULL" ]] && [[ -n "$db_exists" ]]; then
-        log_debug "Database '$database' already exists"
-        return 0
-    fi
-    
-    # Create database
-    local create_sql="CREATE DATABASE [$database];"
-
-    if exec_container "$container_name" "$sqlcmd_path" \
-        -C -S localhost -U sa -P "$sa_password" \
-        -Q "$create_sql" >/dev/null 2>&1; then
-        log_info "Database '$database' created successfully"
-    else
-        log_error "Failed to create database '$database'"
-        return 1
-    fi
-}
-
 # Start SQL Server instance
-sqlserver_up() {
-    local instance="$1"
-    local env_files=("${@:2}")
+engine_up() {
+    local -n C="$1"
+    
+    local engine="${C[engine]}"
+    local instance="${C[instance]}"
     
     log_info "Starting SQL Server instance: $instance"
     
     # Initialize runner first
     init_runner
     
-    # Load environment
-    load_environment "$METADATA_FILE" "${env_files[@]}"
-    
-    validate_sqlserver_env
-    
     local container_name
-    container_name=$(get_container_name "$ENGINE_NAME" "$instance")
+    container_name=$(get_container_name "$engine" "$instance")
+    
+    # validate_sqlserver_env
     
     # Check if container is already running
     if container_running "$container_name"; then
@@ -216,38 +116,17 @@ sqlserver_up() {
         return 0
     fi
     
-    # Check if instance exists
-    local instance_exists=false
-    if instance_exists "$ENGINE_NAME" "$instance"; then
-        log_debug "Loading existing instance: $instance"
-        load_instance "$ENGINE_NAME" "$instance"
-        instance_exists=true
-    else
-        log_debug "Creating new instance: $instance"
-        
-        # Create new instance
-        local version sa_password database network_mode ephemeral
-        version=$(get_env "DBLAB_SQLSERVER_VERSION")
-        sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
-        database=$(get_env "DBLAB_SQLSERVER_DATABASE")
-        network_mode=$(get_env "DBLAB_NETWORK_MODE" "isolated")
-        ephemeral=$(get_env "DBLAB_EPHEMERAL" "false")
-        
-        create_instance "$ENGINE_NAME" "$instance" "$version" "sa" "$sa_password" "$database" "$network_mode" "$ephemeral"
-        load_instance "$ENGINE_NAME" "$instance"
-    fi
-    
     # Get instance configuration
     local data_dir network_name image
-    data_dir=$(get_instance_config "data_dir")
-    network_name=$(get_instance_config "name" "")  # network name from instance config
+    data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlserver/${instance}/data}"
+    network_name="${C[network.name]:-}"
     if [[ -z "$network_name" ]]; then
         # Fallback: generate network name from instance info
         local network_mode
-        network_mode=$(get_instance_config "mode" "isolated")
-        network_name=$(get_network_name "$ENGINE_NAME" "$instance" "$network_mode")
+        network_mode="${C[network.mode]:-isolated}"
+        network_name=$(get_network_name "$engine" "$instance" "$network_mode")
     fi
-    image=$(get_instance_config "image")
+    image="${C[image]}"
     
     # Ensure directories exist
     ensure_dir "$data_dir"
@@ -264,14 +143,48 @@ sqlserver_up() {
         remove_container "$container_name"
     fi
     
-    # Prepare and run container
-    prepare_sqlserver_container "$instance" "$network_name" "$data_dir"
-    
     log_info "Starting SQL Server container: $container_name"
-    run_container
     
+    # Build command arguments
+    local run_args=(
+        "--name" "${container_name}"
+        "--network" "${network_name}"
+        "-d"
+        # SQL Server environment variables
+        "-e" "ACCEPT_EULA=Y"
+        "-e" "MSSQL_SA_PASSWORD=${C[db.password]}"
+        "-e" "MSSQL_PID=${C[db.pid]:-Express}"
+        "-e" "MSSQL_TCP_PORT=${C[db.port]}"
+        # Data volume mount
+        "-v" "${C[storage.data_dir]}:/var/opt/mssql"
+        # Memory limit (SQL Server requires at least 2GB)
+        "--memory=2g"
+        # Run as root to avoid permission issues
+        "--user=0:0"
+    )
+
+    # Expose port if specified
+    local expose_enabled
+    expose_enabled="${C[runtime.expose.enabled]:-false}"
+    if [[ "$expose_enabled" == "true" ]]; then
+        local expose_ports
+        expose_ports="${C[runtime.expose.ports]:-}"
+
+        if [[ -n "$expose_ports" ]]; then
+            # If port is specified without host port (e.g., "1433"), 
+            # map it to the same host port (e.g., "1433:1433")
+            if [[ "$expose_ports" =~ ^[0-9]+$ ]]; then
+                expose_ports="${expose_ports}:${expose_ports}"
+                log_debug "Expanded port mapping to: $expose_ports"
+            fi
+            run_args+=("-p" "$expose_ports")
+        fi
+    fi
+
+    runner_run "${image}" "${run_args[@]}"
+
     # Wait for SQL Server to be ready
-    if ! wait_for_sqlserver "$container_name"; then
+    if ! wait_for_sqlserver "$container_name" 60 "${C[db.password]}" "${C[db.version]}"; then
         log_error "SQL Server startup failed"
         
         # Show logs for debugging
@@ -285,33 +198,19 @@ sqlserver_up() {
         die "SQL Server startup failed"
     fi
     
-    # Create initial database if specified
-    local database sa_password
-    database=$(get_env "DBLAB_SQLSERVER_DATABASE")
-    sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
-    
-    if [[ "$database" != "master" ]]; then
-        create_initial_database "$container_name" "$database" "$sa_password"
-    fi
-    
     # Update instance state
-    update_instance_state "$ENGINE_NAME" "$instance" "last_up" ""
-    update_instance_state "$ENGINE_NAME" "$instance" "status" "running"
+    update_state_up "$engine" "$instance"
     
     log_info "SQL Server instance '$instance' started successfully"
     
     # Show connection information
-    local port
-    port=$(get_instance_config "port")
     log_info "Connection details:"
     log_info "  Host: $container_name (in network: $network_name)"
-    log_info "  Port: $port"
-    log_info "  Database: $(get_instance_config "database")"
+    log_info "  Port: ${C[db.port]}"
+    log_info "  Database: ${C[db.database]}"
     log_info "  User: sa"
     log_info "  Note: Use the SA password you configured"
 }
 
 # Export functions for testing
-export -f validate_sqlserver_env prepare_sqlserver_container wait_for_sqlserver
-export -f create_initial_database sqlserver_up
-export -f engine_up
+export -f validate_sqlserver_env get_sqlcmd_path wait_for_sqlserver engine_up

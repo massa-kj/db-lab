@@ -1,45 +1,82 @@
 # SQL Server engine metadata
 engine: sqlserver
+kind: database
+display_name: "SQL Server"
 
-version:
-  default: "2022-latest"
-  supported:
-    - "2022-latest"
-    - "2019-latest"
-    - "2017-latest"
-
-required_env:
-  - DBLAB_SQLSERVER_VERSION
-  - DBLAB_SQLSERVER_SA_PASSWORD
-  - DBLAB_SQLSERVER_DATABASE
+supported:
+  - "2022-latest"
+  - "2019-latest"
+  - "2017-latest"
 
 defaults:
-  DBLAB_SQLSERVER_VERSION: "2022-latest"
-  DBLAB_SQLSERVER_DATABASE: "app"
-  DBLAB_SQLSERVER_PORT: "1433"
-  DBLAB_SQLSERVER_PID: "Express"
-  DBLAB_EPHEMERAL: false
-  DBLAB_NETWORK_MODE: "isolated"
-  DBLAB_EXPOSE_ENABLED: false
+  db.version: "2022-latest"
+  db.database: "app"
+  db.user: "sa"
+  db.port: "1433"
+  db.pid: "Express"  # Possible values: Express, Developer, Standard, Enterprise
+  storage.persistent: false
+  network.mode: "isolated"
+  runtime.expose.enabled: false
+  # network.name: "dblab_{instance}_isolated"
+  storage.data_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/data"
+  storage.config_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/config"
+  storage.log_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/logs"
+  image: "mcr.microsoft.com/mssql/server:{db.version}"
 
 validation:
   # SQL Server SA password must be at least 8 characters with complexity requirements
   password_min_length: 8
+  user_regex: "^[a-zA-Z0-9_]+$"
   dbname_regex: "^[a-zA-Z0-9_]+$"
 
-generate_template:
-  comments:
-    DBLAB_SQLSERVER_VERSION: "Image tag (ex: 2022-latest, 2019-latest)"
-    DBLAB_SQLSERVER_SA_PASSWORD: "SA user password (min 8 chars with complexity)"
-    DBLAB_SQLSERVER_DATABASE: "Initial database name"
-    DBLAB_SQLSERVER_PID: "SQL Server edition (Express, Developer, etc.)"
-    DBLAB_EPHEMERAL: "If true, data is not persisted"
-  order:
-    - DBLAB_SQLSERVER_VERSION
-    - DBLAB_SQLSERVER_SA_PASSWORD
-    - DBLAB_SQLSERVER_DATABASE
-    - DBLAB_SQLSERVER_PID
-    - DBLAB_EPHEMERAL
+instance_fields:
+  fixed:
+    - "db.user"
+    - "db.password"
+    - "db.database"
+    - "db.port"
+
+env_vars:
+  - name: DBLAB_SQLSERVER_IMAGE
+    map: image
+    description: "Docker image for SQL Server"
+  - name: DBLAB_SQLSERVER_USER
+    map: db.user
+    description: "Database user"
+  - name: DBLAB_SQLSERVER_SA_PASSWORD
+    map: db.password
+    description: "SA user password (min 8 chars with complexity)"
+    required: true
+  - name: DBLAB_SQLSERVER_DATABASE
+    map: db.database
+    description: "Initial database name"
+  - name: DBLAB_SQLSERVER_PORT
+    map: db.port
+    description: "Port for SQL Server"
+  - name: DBLAB_SQLSERVER_VERSION
+    map: db.version
+    description: "SQL Server version tag (ex: 2022-latest, 2019-latest)"
+  - name: DBLAB_SQLSERVER_PID
+    map: db.pid
+    description: "SQL Server edition (Express, Developer, etc.)"
+  - name: DBLAB_NETWORK_MODE
+    map: network.mode
+    description: "Network mode for the container"
+  - name: DBLAB_EXPOSE_ENABLED
+    map: runtime.expose.enabled
+    description: "Whether to expose the database port"
+  - name: DBLAB_EPHEMERAL
+    map: storage.persistent
+    description: "If true, data is not persisted" 
+  - name: DBLAB_STORAGE_DATA_DIR
+    map: storage.data_dir
+    description: "Data directory for SQL Server"
+  - name: DBLAB_STORAGE_CONFIG_DIR
+    map: storage.config_dir
+    description: "Config directory for SQL Server"
+  - name: DBLAB_STORAGE_LOG_DIR
+    map: storage.log_dir
+    description: "Log directory for SQL Server"
 
 cli:
   image: "mcr.microsoft.com/mssql-tools"
