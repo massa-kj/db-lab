@@ -1,19 +1,13 @@
-# SQL Server engine metadata
+# SQL Server client metadata
 engine: sqlserver
-kind: database
-display_name: "SQL Server"
-
-supported:
-  - "2022-latest"
-  - "2019-latest"
-  - "2017-latest"
 
 defaults:
-  db.version: "2022-latest"
-  db.database: "master"
-  db.user: "sa"
+  cli_image: "mcr.microsoft.com/mssql-tools:latest"
+  cli_command: "/opt/mssql-tools/bin/sqlcmd"
+  db.host: "localhost"
   db.port: "1433"
-  db.pid: "Express"  # Possible values: Express, Developer, Standard, Enterprise
+  # db.database: "master"
+  db.user: "sa"
   storage.persistent: false
   network.mode: "isolated"
   runtime.expose.enabled: false
@@ -21,25 +15,20 @@ defaults:
   storage.data_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/data"
   storage.config_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/config"
   storage.log_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/logs"
-  image: "mcr.microsoft.com/mssql/server:{db.version}"
-
-validation:
-  # SQL Server SA password must be at least 8 characters with complexity requirements
-  password_min_length: 8
-  user_regex: "^[a-zA-Z0-9_]+$"
-  dbname_regex: "^[a-zA-Z0-9_]+$"
-
-instance_fields:
-  fixed:
-    - "db.user"
-    - "db.password"
-    - "db.database"
-    - "db.port"
 
 env_vars:
   - name: DBLAB_SQLSERVER_IMAGE
-    map: image
+    map: cli_image
     description: "Docker image for SQL Server"
+  - name: DBLAB_SQLSERVER_CLIENT_COMMAND
+    map: command
+    description: "SQL Server client command"
+  - name: DBLAB_SQLSERVER_HOST
+    map: db.host
+    description: "Host for SQL Server"
+  - name: DBLAB_SQLSERVER_PORT
+    map: db.port
+    description: "Port for SQL Server"
   - name: DBLAB_SQLSERVER_USER
     map: db.user
     description: "Database user"
@@ -50,15 +39,6 @@ env_vars:
   - name: DBLAB_SQLSERVER_DATABASE
     map: db.database
     description: "Initial database name"
-  - name: DBLAB_SQLSERVER_PORT
-    map: db.port
-    description: "Port for SQL Server"
-  - name: DBLAB_SQLSERVER_VERSION
-    map: db.version
-    description: "SQL Server version tag (ex: 2022-latest, 2019-latest)"
-  - name: DBLAB_SQLSERVER_PID
-    map: db.pid
-    description: "SQL Server edition (Express, Developer, etc.)"
   - name: DBLAB_NETWORK_MODE
     map: network.mode
     description: "Network mode for the container"
@@ -77,6 +57,3 @@ env_vars:
   - name: DBLAB_STORAGE_LOG_DIR
     map: storage.log_dir
     description: "Log directory for SQL Server"
-  - name: DBLAB_MEMORY_LIMIT
-    map: runtime.resources.memory
-    description: "Memory limit for SQL Server container (e.g., 2g, 4g, 8g)"

@@ -157,11 +157,16 @@ engine_up() {
         "-e" "MSSQL_TCP_PORT=${C[db.port]}"
         # Data volume mount
         "-v" "${C[storage.data_dir]}:/var/opt/mssql"
-        # Memory limit (SQL Server requires at least 2GB)
-        "--memory=2g"
-        # Run as root to avoid permission issues
-        "--user=0:0"
     )
+
+    # Add memory limit if specified
+    local memory_limit="${C[runtime.resources.memory]:-}"
+    if [[ -n "$memory_limit" ]]; then
+        run_args+=("--memory=${memory_limit}")
+    fi
+
+    # Run as root to avoid permission issues  
+    run_args+=("--user=0:0")
 
     # Expose port if specified
     local expose_enabled
@@ -212,5 +217,69 @@ engine_up() {
     log_info "  Note: Use the SA password you configured"
 }
 
+# Connect to SQL Server CLI (sqlcmd)
+engine_cli() {
+    local -n C="$1"
+    shift  # Remove first argument (config reference)
+
+    # Get SQL Server container name to connect to
+    # local sql_server_container
+    # sql_server_container=$(get_container_name "$engine" "$instance")
+
+    local BEFORE=()
+    local AFTER=()
+    
+    # local host="${C[db.host]:-$sql_server_container}"
+    local host="${C[db.host]:-}"
+    local port="${C[db.port]:-1433}"
+    local user="${C[db.user]}"
+    local pass="${C[db.password]}"
+    local db="${C[db.database]:-master}"
+
+    local cli_container="${host}_cli"
+
+    # CLI 用のイメージ（mcr.microsoft.com/mssql-toolsなど）
+    local cli_image="${C[cli_image]}"
+
+    local network_name
+    network_name="${C[network.name]:-}"
+    if [[ -z "$network_name" ]]; then
+        # Fallback: generate network name from instance info
+        local network_mode
+        network_mode="${C[network.mode]:-isolated}"
+        network_name=$(get_network_name "$engine" "$instance" "$network_mode")
+    fi
+
+    # Check if this is non-interactive mode (has -Q option)
+    local use_interactive=true
+    for arg in "$@"; do
+        if [[ "$arg" == "-Q" ]]; then
+            use_interactive=false
+            break
+        fi
+    done
+    
+    BEFORE+=("--name=${cli_container}")
+    BEFORE+=("--rm")
+    BEFORE+=("--network=${network_name}")
+    BEFORE+=("--env")
+    BEFORE+=("SQLCMDPASSWORD=${pass}")
+    if [[ "$use_interactive" == "true" ]]; then
+        BEFORE+=("--interactive")
+        BEFORE+=("--tty")
+    fi
+    
+    AFTER+=("${C[cli_command]}")
+    AFTER+=("-S" "${host},${port}")
+    AFTER+=("-U" "${user}")
+    # AFTER+=("-d" "${db}")
+    # Pass through all additional arguments
+    for arg in "$@"; do
+        AFTER+=("$arg")
+    done
+    
+    runner_run2 "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+}
+
 # Export functions for testing
-export -f validate_sqlserver_env get_sqlcmd_path wait_for_sqlserver engine_up
+export -f validate_sqlserver_env get_sqlcmd_path wait_for_sqlserver engine_up engine_cli
