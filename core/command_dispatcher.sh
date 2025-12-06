@@ -228,15 +228,6 @@ dblab_dispatch_command() {
                 default_engine_down FINAL_CONFIG
             fi
             ;;
-        cli)
-            # engine_cli "$engine" "$instance" ENV INSTANCE "${args[@]}"
-            ;;
-        exec)
-            # engine_exec "$engine" "$instance" ENV INSTANCE "${args[@]}"
-            ;;
-        gui)
-            # engine_gui "$engine" "$instance" ENV INSTANCE "${args[@]}"
-            ;;
         diag)
             # dblab_diag "$engine" "$instance" ENV INSTANCE
             ;;
@@ -270,8 +261,142 @@ dblab_dispatch_command() {
                 log_info "Instance $engine/$instance status: $status"
             fi
             ;;
+        cli)
+            # Check if engine has cli function
+            if declare -F "engine_cli" >/dev/null; then
+                engine_cli FINAL_CONFIG "${args[@]}"
+            else
+                log_error "$engine does not support CLI access"
+                exit 1
+            fi
+            ;;
+        exec)
+            # Check if engine has exec function
+            if declare -F "engine_exec" >/dev/null; then
+                engine_exec FINAL_CONFIG "${args[@]}"
+            else
+                log_error "$engine does not support script execution"
+                exit 1
+            fi
+            ;;
+        gui)
+            # Check if engine has gui function
+            if declare -F "engine_gui" >/dev/null; then
+                engine_gui FINAL_CONFIG "${args[@]}"
+            else
+                log_error "$engine does not support GUI access"
+                exit 1
+            fi
+            ;;
         list)
             dispatch_list_command "$engine" "$VERBOSE_MODE"
+            ;;
+        *)
+            log_error "Unknown command: $command"
+            ;;
+    esac
+}
+
+dblab_dispatch_client_command() {
+    local command="$1"
+    local engine="$2"
+    local instance="$3"
+    shift 3
+
+    local env_files=()
+    local args=()
+
+    # env-file is passed as ENV_FILES
+    # Finally, command-specific options are placed in $@
+    while [[ "$1" != "--" ]]; do
+        env_files+=("$1")
+        shift
+    done
+    shift # remove --
+    args=("$@")
+    
+    log_debug "Dispatching command '$command' for engine '$engine' and instance '$instance'"
+
+    # =============================================================
+    # State holders (assoc-array)
+    # =============================================================
+    declare -A META=()
+    declare -A META_DEFAULTS=()
+    declare -A ENV_RUNTIME=()
+    declare -A CLI_RUNTIME=()
+    declare -A FINAL_CONFIG=()
+
+    # ---------------------------------------------------------
+    # Load metadata
+    # ---------------------------------------------------------
+    client_metadata_load "$engine" META META_DEFAULTS
+    # log_debug "Loaded metadata for $engine"
+
+    # ---------------------------------------------------------
+    # Load environment variables
+    # ---------------------------------------------------------
+    env_load "$engine" ENV_FILES ENV_RUNTIME
+
+    # ---------------------------------------------------------
+    # Merge layers
+    # ---------------------------------------------------------
+    # Ensure engine and instance are set in CLI_RUNTIME
+    # CLI_RUNTIME[engine]="$engine"
+    # CLI_RUNTIME[instance]="$instance"
+    
+    client_merge_layers FINAL_CONFIG \
+        META_DEFAULTS \
+        ENV_RUNTIME \
+        CLI_RUNTIME
+    log_debug "Merged configuration layers into FINAL_CONFIG"
+
+    # ---------------------------------------------------------
+    # Configuration interpolation
+    # ---------------------------------------------------------
+    # config_interpolator FINAL_CONFIG
+
+    # ---------------------------------------------------------
+    # Load engine module
+    # ---------------------------------------------------------
+    local engine_root="${DBLAB_ROOT:-${ENGINES_DIR}/$engine}"
+    local engine_main="$engine_root/main.sh"
+    if [[ ! -f $engine_main ]]; then
+        log_error "engine main not found: $engine_main"
+    fi
+
+    # shellcheck source=/dev/null
+    source "$engine_main"
+
+    # ----------------------------------------------
+    # Dispatch by command type
+    # ----------------------------------------------
+    case "$command" in
+        cli)
+            # Check if engine has cli function
+            if declare -F "engine_cli" >/dev/null; then
+                engine_cli FINAL_CONFIG "${args[@]}"
+            else
+                log_error "$engine does not support CLI access"
+                exit 1
+            fi
+            ;;
+        exec)
+            # Check if engine has exec function
+            if declare -F "engine_exec" >/dev/null; then
+                engine_exec FINAL_CONFIG "${args[@]}"
+            else
+                log_error "$engine does not support script execution"
+                exit 1
+            fi
+            ;;
+        gui)
+            # Check if engine has gui function
+            if declare -F "engine_gui" >/dev/null; then
+                engine_gui FINAL_CONFIG "${args[@]}"
+            else
+                log_error "$engine does not support GUI access"
+                exit 1
+            fi
             ;;
         *)
             log_error "Unknown command: $command"

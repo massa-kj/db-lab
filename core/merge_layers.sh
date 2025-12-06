@@ -132,3 +132,48 @@ merge_layers() {
 
     log_debug "[merge] done merging layers; keys=${!OUT[*]}"
 }
+
+client_merge_layers() {
+    local out_name="$1"; shift
+    local meta_defaults_name="$1"; shift
+    local env_runtime_name="$1"; shift
+    local cli_runtime_name="$1"; shift
+
+    # Reference with nameref
+    local -n DEF="$meta_defaults_name"
+    local -n ENV="$env_runtime_name"
+    local -n CLI="$cli_runtime_name"
+    local -n OUT="$out_name"
+
+    # Initialize OUT
+    for k in "${!OUT[@]}"; do unset "OUT[$k]"; done
+
+    log_debug "[merge] start merging layers"
+
+    # ----------------------------
+    # 1. metadata.defaults (weakest)
+    # ----------------------------
+    for key in "${!DEF[@]}"; do
+        OUT["$key"]="${DEF[$key]}"
+    done
+
+    # ----------------------------
+    # 3. env.runtime
+    # ----------------------------
+    for key in "${!ENV[@]}"; do
+        OUT["$key"]="${ENV[$key]}"
+    done
+
+    # ----------------------------
+    # 4. cli.options (highest priority variable layer)
+    # ----------------------------
+    for key in "${!CLI[@]}"; do
+        OUT["$key"]="${CLI[$key]}"
+    done
+
+    # Required field validation
+    # TODO: Need mechanism to skip for commands like list that don't specify instance
+    # _validate_required "$out_name" "$instance_fields_name"
+
+    log_debug "[merge] done merging layers; keys=${!OUT[*]}"
+}

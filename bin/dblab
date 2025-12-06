@@ -35,6 +35,7 @@ DEBUG_MODE="false"
 HELP_MODE="false"
 VERBOSE_MODE="false"
 EXPOSE_PORTS=""
+COMMAND_ARGS=()
 
 # Show usage information
 show_usage() {
@@ -50,6 +51,7 @@ COMMANDS:
     up <engine>       Start database instance
     down <engine>     Stop database instance
     status <engine>   Show instance status
+    cli <engine>      Connect to database CLI/shell
     destroy <engine>  Remove instance and all data (destructive)
     list <engine>     List instances for engine
     list <engine> -v  List instances with detailed information
@@ -57,6 +59,7 @@ COMMANDS:
 
 ENGINES:
     postgres          PostgreSQL database
+    sqlserver         Microsoft SQL Server database
 
 GLOBAL OPTIONS:
     --instance, -i <name>    Instance name (required for most commands)
@@ -75,6 +78,12 @@ EXAMPLES:
     
     # Start with custom port mapping
     dblab up postgres --instance pg16 --env-file pg16.env --expose 15432:5432
+    
+    # Connect to PostgreSQL CLI
+    dblab cli postgres --instance pg16 --env-file pg16.env
+    
+    # Connect to SQL Server CLI with query
+    dblab cli sqlserver --instance mssql2022 --env-file mssql2022.env -Q "SELECT @@VERSION"
     
     # Stop PostgreSQL instance
     dblab down postgres --instance pg16
@@ -100,8 +109,10 @@ For more information, see the documentation.
 EOF
 }
 
-# Parse command line arguments
+# Parse command line arguments  
 parse_args() {
+    local remaining_args=()
+    
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --help|-h)
@@ -139,7 +150,14 @@ parse_args() {
                 shift 2
                 ;;
             --*)
-                die "Unknown option: $1"
+                # Check if we have command and engine already set
+                if [[ -n "$COMMAND" && -n "$ENGINE" ]]; then
+                    # This is a command-specific option, collect remaining args
+                    remaining_args+=("$@")
+                    break
+                else
+                    die "Unknown option: $1"
+                fi
                 ;;
             *)
                 # First non-option argument is the command
@@ -151,11 +169,16 @@ parse_args() {
                     ENGINE="$1"
                     shift
                 else
-                    die "Unexpected argument: $1"
+                    # All remaining arguments are command-specific
+                    remaining_args+=("$@")
+                    break
                 fi
                 ;;
         esac
     done
+    
+    # Store remaining args in a global variable for main function
+    COMMAND_ARGS=("${remaining_args[@]}")
 }
 
 # Validate command line arguments
@@ -169,7 +192,7 @@ validate_args() {
     fi
     
     case "$COMMAND" in
-        up|down|status|destroy|init)
+        up|down|status|destroy|init|cli|exec|gui|diag)
             if [[ -z "$ENGINE" ]]; then
                 die "Engine is required for command '$COMMAND'"
             fi
@@ -228,17 +251,27 @@ main() {
     
     log_debug "Command: $COMMAND, Engine: $ENGINE, Instance: $INSTANCE"
     log_debug "Environment files: ${ENV_FILES[*]}"
+    log_debug "Command-specific arguments: ${COMMAND_ARGS[*]}"
     
     # Execute command
     case "$COMMAND" in
-        init|up|down|status|cli|exec|gui|diag|destroy|list)
+        init|up|down|status|diag|destroy|list)
             dblab_dispatch_command \
                 "$COMMAND" \
                 "$ENGINE" \
                 "$INSTANCE" \
                 "${ENV_FILES[@]}" \
                 -- \
-                "$@"
+                "${COMMAND_ARGS[@]}"
+            ;;
+        cli|exec|gui)
+            dblab_dispatch_client_command \
+                "$COMMAND" \
+                "$ENGINE" \
+                "$INSTANCE" \
+                "${ENV_FILES[@]}" \
+                -- \
+                "${COMMAND_ARGS[@]}"
             ;;
         *)
             die "Internal error: Unknown command: $COMMAND"
