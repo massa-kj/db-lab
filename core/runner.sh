@@ -461,27 +461,102 @@ runner_run() {
   shift || true
 
   # NOTE:
-  #   - Basically just transparently pass to backend `run`.
-  #   - If there are common options to add (--tmpfs, --group-add etc.)
-  #     put them together in _runner__common_run_args.
-  #
-  # Example:
-  #   runner_run "${C[image]}" \
-  #     --name "${C[container.name]}" \
-  #     --network "${C[network.name]}" \
-  #     -e "POSTGRES_USER=${C[db.user]}" \
-  #     ...
-  #
+  #   - Docker/Podman syntax: docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
+  #   - We need to separate Docker options from the command to run in the container
+  #   - Everything up to the first non-option argument (doesn't start with -) is Docker options
+  #   - Everything after that is the command and its arguments
+  
+  local docker_args=()
+  local command_args=()
+  local parsing_docker_opts=true
+  
+  # Parse arguments to separate Docker options from container command
+  while [[ $# -gt 0 ]]; do
+    if [[ "$parsing_docker_opts" == "true" ]] && [[ "$1" =~ ^- ]]; then
+      # This is a Docker option
+      docker_args+=("$1")
+      # Check if this option takes a value (either separate or --option=value format)
+      if [[ "$1" =~ ^(-e|--env|--name|--network|-v|--volume|--mount|--workdir|--user|--entrypoint)$ ]] && [[ $# -gt 1 ]]; then
+        shift
+        docker_args+=("$1")
+      elif [[ "$1" =~ ^(-e=|--env=|--name=|--network=|-v=|--volume=|--mount=|--workdir=|--user=|--entrypoint=) ]]; then
+        # Option already contains the value (--option=value format), no need to shift again
+        :
+      fi
+    else
+      # This is the start of the command to run in the container
+      parsing_docker_opts=false
+      command_args+=("$1")
+    fi
+    shift
+  done
   
   local common_args
   common_args="$(_runner__common_run_args)"
   
-  # Execute with proper argument handling
+  # Execute with proper argument handling: docker run [COMMON_ARGS] [DOCKER_ARGS] IMAGE [COMMAND_ARGS]
   if [[ -n "$common_args" ]]; then
-    "$RUNNER_BIN" run $common_args "$@" "$image"
+    "$RUNNER_BIN" run $common_args "${docker_args[@]}" "$image" "${command_args[@]}"
   else
-    "$RUNNER_BIN" run "$@" "$image"
+    "$RUNNER_BIN" run "${docker_args[@]}" "$image" "${command_args[@]}"
   fi
+}
+
+# ------------------------------------------------------------
+# runner_run
+#   Usage:
+#     runner_run "$IMAGE" --before OPT... --after CMD ARGS...
+#
+#   Example:
+#     runner_run "postgres:16" \
+#         --before "--rm" \
+#         --before "--network=my_net" \
+#         --after "postgres" \
+#         --after "--config=/etc/postgresql.conf"
+# ------------------------------------------------------------
+runner_run2() {
+    local image="$1"; shift
+
+    local BEFORE=()
+    local AFTER=()
+    runner_init
+
+    # collect segments
+    local mode="before"
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --before)
+                mode="before"
+                shift
+                ;;
+            --after)
+                mode="after"
+                shift
+                ;;
+            --)
+                mode="after"
+                shift
+                ;;
+            *)
+                if [[ "$mode" == "before" ]]; then
+                    BEFORE+=("$1")
+                else
+                    AFTER+=("$1")
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    local common_args
+    common_args="$(_runner__common_run_args)"
+
+    # Execute with proper argument handling: docker run [COMMON_ARGS] [DOCKER_ARGS] IMAGE [COMMAND_ARGS]
+    if [[ -n "$common_args" ]]; then
+        "$RUNNER_BIN" run $common_args "${BEFORE[@]}" "$image" "${AFTER[@]}"
+    else
+        "$RUNNER_BIN" run "${BEFORE[@]}" "$image" "${AFTER[@]}"
+    fi
 }
 
 runner_exec() {
