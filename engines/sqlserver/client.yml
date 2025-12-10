@@ -6,22 +6,19 @@ defaults:
   cli_command: "/opt/mssql-tools/bin/sqlcmd"
   db.host: "localhost"
   db.port: "1433"
-  # db.database: "master"
+  db.database: "master"
   db.user: "sa"
   storage.persistent: false
   network.mode: "isolated"
   runtime.expose.enabled: false
   # network.name: "dblab_{instance}_isolated"
-  storage.data_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/data"
-  storage.config_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/config"
-  storage.log_dir: "{XDG_DATA_HOME}/dblab/sqlserver/{instance}/logs"
 
 env_vars:
   - name: DBLAB_SQLSERVER_IMAGE
     map: cli_image
     description: "Docker image for SQL Server"
   - name: DBLAB_SQLSERVER_CLIENT_COMMAND
-    map: command
+    map: cli_command
     description: "SQL Server client command"
   - name: DBLAB_SQLSERVER_HOST
     map: db.host
@@ -48,12 +45,3 @@ env_vars:
   - name: DBLAB_EPHEMERAL
     map: storage.persistent
     description: "If true, data is not persisted" 
-  - name: DBLAB_STORAGE_DATA_DIR
-    map: storage.data_dir
-    description: "Data directory for SQL Server"
-  - name: DBLAB_STORAGE_CONFIG_DIR
-    map: storage.config_dir
-    description: "Config directory for SQL Server"
-  - name: DBLAB_STORAGE_LOG_DIR
-    map: storage.log_dir
-    description: "Log directory for SQL Server"

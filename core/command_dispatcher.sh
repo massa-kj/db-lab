@@ -261,33 +261,33 @@ dblab_dispatch_command() {
                 log_info "Instance $engine/$instance status: $status"
             fi
             ;;
-        cli)
-            # Check if engine has cli function
-            if declare -F "engine_cli" >/dev/null; then
-                engine_cli FINAL_CONFIG "${args[@]}"
-            else
-                log_error "$engine does not support CLI access"
-                exit 1
-            fi
-            ;;
-        exec)
-            # Check if engine has exec function
-            if declare -F "engine_exec" >/dev/null; then
-                engine_exec FINAL_CONFIG "${args[@]}"
-            else
-                log_error "$engine does not support script execution"
-                exit 1
-            fi
-            ;;
-        gui)
-            # Check if engine has gui function
-            if declare -F "engine_gui" >/dev/null; then
-                engine_gui FINAL_CONFIG "${args[@]}"
-            else
-                log_error "$engine does not support GUI access"
-                exit 1
-            fi
-            ;;
+        # cli)
+        #     # Check if engine has cli function
+        #     if declare -F "engine_cli" >/dev/null; then
+        #         engine_cli FINAL_CONFIG "${args[@]}"
+        #     else
+        #         log_error "$engine does not support CLI access"
+        #         exit 1
+        #     fi
+        #     ;;
+        # exec)
+        #     # Check if engine has exec function
+        #     if declare -F "engine_exec" >/dev/null; then
+        #         engine_exec FINAL_CONFIG "${args[@]}"
+        #     else
+        #         log_error "$engine does not support script execution"
+        #         exit 1
+        #     fi
+        #     ;;
+        # gui)
+        #     # Check if engine has gui function
+        #     if declare -F "engine_gui" >/dev/null; then
+        #         engine_gui FINAL_CONFIG "${args[@]}"
+        #     else
+        #         log_error "$engine does not support GUI access"
+        #         exit 1
+        #     fi
+        #     ;;
         list)
             dispatch_list_command "$engine" "$VERBOSE_MODE"
             ;;
@@ -341,7 +341,7 @@ dblab_dispatch_client_command() {
     # Merge layers
     # ---------------------------------------------------------
     # Ensure engine and instance are set in CLI_RUNTIME
-    # CLI_RUNTIME[engine]="$engine"
+    CLI_RUNTIME[engine]="$engine"
     # CLI_RUNTIME[instance]="$instance"
     
     client_merge_layers FINAL_CONFIG \
@@ -349,6 +349,7 @@ dblab_dispatch_client_command() {
         ENV_RUNTIME \
         CLI_RUNTIME
     log_debug "Merged configuration layers into FINAL_CONFIG"
+    dump_dict FINAL_CONFIG
 
     # ---------------------------------------------------------
     # Configuration interpolation
@@ -371,6 +372,10 @@ dblab_dispatch_client_command() {
     # Dispatch by command type
     # ----------------------------------------------
     case "$command" in
+        init-cli)
+            source "${SCRIPT_DIR}/env_template.sh"
+            generate_client_env_template FINAL_CONFIG
+            ;;
         cli)
             # Check if engine has cli function
             if declare -F "engine_cli" >/dev/null; then

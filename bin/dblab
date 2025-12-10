@@ -201,7 +201,7 @@ validate_args() {
                 die "Instance name is required for command '$COMMAND'. Use --instance <name>"
             fi
             ;;
-        list)
+        list|init-cli)
             if [[ -z "$ENGINE" ]]; then
                 die "Engine is required for command '$COMMAND'"
             fi
@@ -264,7 +264,7 @@ main() {
                 -- \
                 "${COMMAND_ARGS[@]}"
             ;;
-        cli|exec|gui)
+        init-cli|cli|exec|gui)
             dblab_dispatch_client_command \
                 "$COMMAND" \
                 "$ENGINE" \

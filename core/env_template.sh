@@ -132,5 +132,62 @@ validate_env_file() {
     return 0
 }
 
+generate_client_env_template() {
+    local -n C="$1"
+    
+    local engine="${C[engine]}"
+    local instance="${C[instance]:-}"
+    
+    log_debug "Generating environment template for $engine instance: $instance"
+    
+    echo "# Environment template for $engine instance: $instance"
+    echo "# Generated on $(date)"
+    echo "# Usage: dblab cli $engine --env-file ${instance}.env"
+    echo ""
+    
+    echo "# ==============================="
+    echo "# CONFIGURABLE ENGINE PARAMETERS"
+    echo "# ==============================="
+    echo ""
+    
+    # Generate optional env vars from META_ENV_VARS (all non-required variables)
+    local count=0
+    for key in "${!META_ENV_VARS[@]}"; do
+        [[ "$key" =~ ^env_vars\[[0-9]+\]\.name$ ]] && count=$((count + 1))
+    done
+    
+    for ((i = 0; i < count; i++)); do
+        local name_key="env_vars[$i].name"
+        local required_key="env_vars[$i].required"
+        local desc_key="env_vars[$i].description"
+        local map_key="env_vars[$i].map"
+        
+        local env_var="${META_ENV_VARS[$name_key]}"
+        local is_required="${META_ENV_VARS[$required_key]:-false}"
+        local description="${META_ENV_VARS[$desc_key]:-}"
+        local cfg_key="${META_ENV_VARS[$map_key]:-}"
+        
+        # Get default value from CFG if available
+        local default_value=""
+        if [[ -n "$cfg_key" && -n "${C[$cfg_key]+_}" ]]; then
+            default_value="${C[$cfg_key]}"
+        fi
+        
+        # Generate comment if description exists
+        if [[ -n "$description" ]]; then
+            echo "# $description"
+        fi
+        
+        if [[ -n "$default_value" ]]; then
+            echo "${env_var}=${default_value}"
+        elif [[ "$is_required" == "true" ]]; then
+            echo "${env_var}=# REQUIRED: Set this value"
+        else
+            echo "${env_var}="
+        fi
+        echo ""
+    done
+}
+
 # Export functions
-export -f generate_env_template validate_env_file
+export -f generate_env_template generate_client_env_template validate_env_file
