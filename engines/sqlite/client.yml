@@ -1,0 +1,34 @@
+# SQLite client metadata
+engine: sqlite
+
+defaults:
+  cli_image: "alpine:latest"
+  cli_command: "sqlite3"
+  db.file_path: "{XDG_DATA_HOME}/dblab/sqlite/data/{instance}.sqlite"
+  storage.persistent: true
+  network.mode: "isolated"
+  runtime.expose.enabled: false
+  sqlite.use_container: false
+
+env_vars:
+  - name: DBLAB_SQLITE_CLI_IMAGE
+    map: cli_image
+    description: "Docker image for SQLite CLI"
+  - name: DBLAB_SQLITE_CLIENT_COMMAND
+    map: cli_command
+    description: "Command to run SQLite CLI"
+  - name: DBLAB_SQLITE_DATABASE
+    map: db.database
+    description: "Database name (SQLite database identifier)"
+  - name: DBLAB_SQLITE_FILE_PATH
+    map: db.file_path
+    description: "Path to SQLite database file inside container"
+  - name: DBLAB_SQLITE_USE_CONTAINER
+    map: sqlite.use_container
+    description: "Use container for CLI operations instead of host sqlite3 command (true/false)"
+  - name: DBLAB_NETWORK_MODE
+    map: network.mode
+    description: "Network mode for the container"
+  - name: DBLAB_EPHEMERAL
+    map: storage.persistent
+    description: "If false, database files will be deleted on down"

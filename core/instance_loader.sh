@@ -370,14 +370,14 @@ _instance_extract_fixed() {
     OUT[image]="${RAW[image]}"
 
     # db.*
-    OUT[db.user]="${RAW[db.user]}"
-    OUT[db.password]="${RAW[db.password]}"
+    OUT[db.user]="${RAW[db.user]:-}"
+    OUT[db.password]="${RAW[db.password]:-}"
     OUT[db.database]="${RAW[db.database]}"
-    OUT[db.port]="${RAW[db.port]}"
+    OUT[db.port]="${RAW[db.port]:-}"
 
     # storage.*
     OUT[storage.persistent]="${RAW[storage.persistent]}"
     OUT[storage.data_dir]="${RAW[storage.data_dir]}"
-    OUT[storage.config_dir]="${RAW[storage.config_dir]}"
-    OUT[storage.log_dir]="${RAW[storage.log_dir]}"
+    OUT[storage.config_dir]="${RAW[storage.config_dir]:-}"
+    OUT[storage.log_dir]="${RAW[storage.log_dir]:-}"
 }

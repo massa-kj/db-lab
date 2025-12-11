@@ -349,7 +349,7 @@ _validate_network_mode() {
     local mode="${FIXED[network.mode]:-}"
 
     case "$mode" in
-        isolated|engine-shared)
+        isolated|engine-shared|none)
             return 0 ;;
         *)
             log_error "[validator] invalid network.mode: $mode"

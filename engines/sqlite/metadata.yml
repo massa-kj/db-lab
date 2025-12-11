@@ -1,0 +1,90 @@
+# SQLite engine metadata
+engine: sqlite
+kind: database
+display_name: "SQLite"
+
+supported:
+  - "3.45"
+  - "3.44"
+  - "3.43"
+  - "latest"
+
+defaults:
+  db.version: "latest"
+  db.database: "main"  # Default database in SQLite
+  db.user: "sqlite"    # SQLite doesn't have users, but set for compatibility
+  db.password: ""      # SQLite doesn't use passwords
+  db.port: "0"         # SQLite doesn't use ports
+  db.file_extension: ".sqlite"
+  storage.persistent: true  # SQLite is file-based, so persistent by default
+  network.mode: "isolated"  # Use isolated network for consistency
+  runtime.expose.enabled: false  # No network exposure needed for SQLite
+  # File paths
+  storage.data_dir: "{XDG_DATA_HOME}/dblab/sqlite/{instance}/data"
+  storage.config_dir: "{XDG_DATA_HOME}/dblab/sqlite/{instance}/config"
+  storage.log_dir: "{XDG_DATA_HOME}/dblab/sqlite/{instance}/logs"
+  storage.backup_dir: "{XDG_DATA_HOME}/dblab/sqlite/{instance}/backup"
+  db.file_path: "/data/{instance}{db.file_extension}"
+  # Container image with sqlite3 
+  image: "alpine:latest"
+  cli_image: "alpine:latest"
+  cli_command: "sqlite3"
+  # Journal mode and other pragmas
+  sqlite.journal_mode: "WAL"  # Write-Ahead Logging for better concurrency
+  sqlite.foreign_keys: "ON"   # Enable foreign key constraints
+  sqlite.timeout: "30000"     # Busy timeout in milliseconds
+  # Container usage for CLI operations
+  sqlite.use_container: false  # Use host sqlite3 command by default
+
+validation:
+  # File name validation for database instance
+  instance_regex: "^[a-zA-Z0-9_-]+$"
+  # SQLite version format (Alpine version tags)
+  version_regex: "^(3\.[0-9]+|latest)$"
+
+instance_fields:
+  fixed:
+    - "db.database"
+    - "db.file_path"
+    - "image"
+
+env_vars:
+  - name: DBLAB_SQLITE_IMAGE
+    map: image
+    description: "Docker image for SQLite (Alpine-based with sqlite3)"
+  - name: DBLAB_SQLITE_CLI_IMAGE
+    map: cli_image
+    description: "Docker image for SQLite CLI operations"
+  - name: DBLAB_SQLITE_DATABASE
+    map: db.database
+    description: "Database name (SQLite database identifier)"
+  - name: DBLAB_SQLITE_FILE_EXTENSION
+    map: db.file_extension
+    description: "File extension for SQLite database files (default: .sqlite)"
+  - name: DBLAB_SQLITE_JOURNAL_MODE
+    map: sqlite.journal_mode
+    description: "SQLite journal mode (DELETE, TRUNCATE, PERSIST, MEMORY, WAL, OFF)"
+  - name: DBLAB_SQLITE_FOREIGN_KEYS
+    map: sqlite.foreign_keys
+    description: "Enable foreign key constraints (ON/OFF)"
+  - name: DBLAB_SQLITE_TIMEOUT
+    map: sqlite.timeout
+    description: "Busy timeout in milliseconds"
+  - name: DBLAB_SQLITE_USE_CONTAINER
+    map: sqlite.use_container
+    description: "Use container for CLI operations instead of host sqlite3 command (true/false)"
+  - name: DBLAB_SQLITE_VERSION
+    map: db.version
+    description: "SQLite version (Alpine version tag)"
+  - name: DBLAB_NETWORK_MODE
+    map: network.mode
+    description: "Network mode for the container"
+  - name: DBLAB_STORAGE_DATA_DIR
+    map: storage.data_dir
+    description: "Data directory for SQLite database files"
+  - name: DBLAB_STORAGE_BACKUP_DIR
+    map: storage.backup_dir
+    description: "Backup directory for SQLite database files"
+  - name: DBLAB_EPHEMERAL
+    map: storage.persistent
+    description: "If false, database files will be deleted on down"
