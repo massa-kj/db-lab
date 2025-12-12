@@ -44,9 +44,9 @@ validation:
 
 instance_fields:
   fixed:
+    - "image"
     - "db.database"
     - "db.file_path"
-    - "image"
 
 env_vars:
   - name: DBLAB_SQLITE_IMAGE

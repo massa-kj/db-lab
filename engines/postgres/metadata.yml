@@ -29,10 +29,18 @@ validation:
 
 instance_fields:
   fixed:
+    - "image"
+    - "instance"
+    - "version"
+    - "network.mode"
     - "db.user"
     - "db.password"
     - "db.database"
     - "db.port"
+    - "storage.persistent"
+    - "storage.data_dir"
+    - "storage.config_dir"
+    - "storage.log_dir"
 
 env_vars:
   - name: DBLAB_PG_IMAGE
