@@ -4,11 +4,15 @@ engine: sqlite
 defaults:
   cli_image: "alpine:latest"
   cli_command: "sqlite3"
+  db.database: "main"
   db.file_path: "{XDG_DATA_HOME}/dblab/sqlite/data/{instance}.sqlite"
   storage.persistent: true
   network.mode: "isolated"
   runtime.expose.enabled: false
   sqlite.use_container: false
+  # CLI-specific settings
+  cli.workdir: "/workdir"      # Working directory inside CLI container
+  cli.db_file: ""              # Full path to database file for CLI (overrides default)
 
 env_vars:
   - name: DBLAB_SQLITE_CLI_IMAGE
@@ -32,3 +36,9 @@ env_vars:
   - name: DBLAB_EPHEMERAL
     map: storage.persistent
     description: "If false, database files will be deleted on down"
+  - name: DBLAB_SQLITE_CLI_DB_FILE
+    map: cli.db_file
+    description: "Full path to SQLite database file for CLI access"
+  - name: DBLAB_SQLITE_CLI_WORKDIR
+    map: cli.workdir
+    description: "Working directory inside CLI container"

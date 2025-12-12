@@ -99,7 +99,10 @@ INSERT OR REPLACE INTO _dblab_metadata (key, value) VALUES ('last_started', date
 "
     
     # Execute initialization SQL
-    if exec_container "$container_name" sqlite3 "$db_file_path" <<< "$init_sql"; then
+    # Use sh -c with proper quoting
+    if exec_container "$container_name" sh -c "cat << 'EOF' | sqlite3 '$db_file_path'
+$init_sql
+EOF"; then
         log_debug "SQLite database initialized successfully"
     else
         log_error "Failed to initialize SQLite database"
@@ -320,41 +323,49 @@ engine_cli() {
     
     log_debug "CLI connecting to instance: $instance (engine: $engine, use_container: $use_container)"
     
-    # Get database file path
-    local data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlite/${instance}/data}"
-    local db_file_path_host="${data_dir}/${instance}${C[db.file_extension]:-.sqlite}"
+    # Determine which database file to use
+    local cli_db_file="${C[cli.db_file]:-}"
+    local target_db_file=""
     
-    # Convert {instance} placeholder in container path
-    local db_file_path_container="${C[db.file_path]}"
-    db_file_path_container="${db_file_path_container//\{instance\}/$instance}"
+    if [[ -n "$cli_db_file" ]]; then
+        # Use custom database file specified in env
+        target_db_file="$cli_db_file"
+        log_info "Using custom database file: $target_db_file"
+    else
+        # Use default instance database file
+        local data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlite/${instance}/data}"
+        target_db_file="${data_dir}/${instance}${C[db.file_extension]:-.sqlite}"
+        log_info "Using default instance database: ${instance}.sqlite"
+    fi
+    
+    # Check if database file exists
+    if [[ ! -f "$target_db_file" ]]; then
+        log_error "Database file not found: $target_db_file"
+        if [[ -n "$cli_db_file" ]]; then
+            log_error "Custom database file specified in DBLAB_SQLITE_CLI_DB_FILE does not exist"
+        else
+            log_error "Please run 'dblab up sqlite --instance $instance' first"
+        fi
+        return 1
+    fi
     
     if [[ "$use_container" == "false" ]]; then
         # Use host sqlite3 command
         if check_host_sqlite; then
             log_info "Using host sqlite3 command"
             
-            # Check if database file exists
-            if [[ ! -f "$db_file_path_host" ]]; then
-                log_error "Database file not found: $db_file_path_host"
-                log_error "Please run 'dblab up sqlite --instance $instance' first"
-                return 1
-            fi
-            
             # Execute sqlite3 directly on host
             if [[ $# -eq 0 ]]; then
                 # Interactive mode
-                sqlite3 "$db_file_path_host"
+                sqlite3 "$target_db_file"
             else
                 # Non-interactive mode with arguments
-                sqlite3 "$db_file_path_host" "$@"
+                sqlite3 "$target_db_file" "$@"
             fi
             return $?
         else
             log_error "Host sqlite3 command not found"
             log_error "Please install sqlite3 on the host or set DBLAB_SQLITE_USE_CONTAINER=true"
-            log_error "Install command (Ubuntu/Debian): sudo apt-get install sqlite3"
-            log_error "Install command (RHEL/CentOS): sudo yum install sqlite"
-            log_error "Install command (macOS): brew install sqlite"
             return 1
         fi
     fi
@@ -365,56 +376,42 @@ engine_cli() {
     # Initialize runner
     init_runner
     
-    # Get SQLite container name to connect to
-    local sqlite_container
-    sqlite_container=$(get_container_name "$engine" "$instance")
-
+    # CLI image
+    local cli_image="${C[cli_image]}"
+    local cli_workdir="${C[cli.workdir]:-/workdir}"
+    
+    # Get directory and filename of the target database
+    local db_dir="$(dirname "$target_db_file")"
+    local db_filename="$(basename "$target_db_file")"
+    
+    log_debug "Mounting directory: $db_dir -> $cli_workdir"
+    log_debug "Database file: $db_filename"
+    
+    # Use the elegant approach you suggested with proper argument handling
     local BEFORE=()
     local AFTER=()
     
-    local cli_container="${sqlite_container}_cli"
-
-    # CLI image (should be the same as main image for SQLite)
-    local cli_image="${C[cli_image]}"
-
-    local network_name
-    network_name="${C[network.name]:-}"
-    if [[ -z "$network_name" ]]; then
-        # Fallback: generate network name from instance info
-        local network_mode
-        network_mode="${C[network.mode]:-isolated}"
-        network_name=$(get_network_name "$engine" "$instance" "$network_mode")
-    fi
-
-    # Check if this is non-interactive mode (has specific commands)
-    local use_interactive=true
-    for arg in "$@"; do
-        if [[ "$arg" == ".quit" || "$arg" =~ ^[.].*$ ]]; then
-            use_interactive=false
-            break
-        fi
-    done
+    # Common container options
+    BEFORE+=(--rm)
+    BEFORE+=(-v "${db_dir}:${cli_workdir}")
     
-    BEFORE+=("--name=${cli_container}")
-    BEFORE+=("--rm")
-    BEFORE+=("--network=${network_name}")
-    # Mount the data directory directly
-    BEFORE+=("-v" "${data_dir}:/data")
-    if [[ "$use_interactive" == "true" ]]; then
-        BEFORE+=("--interactive")
-        BEFORE+=("--tty")
+    if [[ $# -eq 0 ]]; then
+        # Interactive mode
+        BEFORE+=(-it)
+        AFTER+=(sh -c "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite; sqlite3 '${cli_workdir}/${db_filename}'")
+    else
+        # Non-interactive mode with arguments - build full command
+        local full_cmd="command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite; sqlite3 '${cli_workdir}/${db_filename}'"
+        for arg in "$@"; do
+            # Escape single quotes in arguments
+            local escaped_arg="${arg//\'/\'\"\'\"\'}"
+            full_cmd+=" '$escaped_arg'"
+        done
+        AFTER+=(sh -c "$full_cmd")
     fi
     
-    AFTER+=("${C[cli_command]}")
-    AFTER+=("${db_file_path_container}")
-    
-    # Pass through all additional arguments
-    for arg in "$@"; do
-        AFTER+=("$arg")
-    done
-    
-    # Install sqlite3 in the CLI container before running command
-    runner_run2 "${cli_image}" --before "${BEFORE[@]}" --after sh -c "apk add --no-cache sqlite && ${AFTER[*]}"
+    # Execute with runner_run2
+    runner_run2 "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
 # Execute SQL script or command
