@@ -121,8 +121,8 @@ metadata_load() {
     # ---------------------------------------------------------
     # 5. Load instance_fields.fixed array
     # ---------------------------------------------------------
-    declare -ga META_DB_FIELDS=()
-    yaml_get_array OUT_META "instance_fields.fixed" META_DB_FIELDS || true
+    declare -ga META_FIXED=()
+    yaml_get_array OUT_META "instance_fields.fixed" META_FIXED || true
 
     log_debug "[metadata] loaded: engine=$engine required_env=${#META_REQUIRED_ENV[@]} defaults=${#OUT_DEFAULTS[@]}"
 }

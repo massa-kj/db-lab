@@ -167,7 +167,7 @@ dblab_dispatch_command() {
         ENV_RUNTIME \
         CLI_RUNTIME \
         INSTANCE_FIXED \
-        META_DB_FIELDS
+        META_FIXED
     log_debug "Merged configuration layers into FINAL_CONFIG"
 
     # ---------------------------------------------------------
@@ -208,7 +208,7 @@ dblab_dispatch_command() {
             # ----------------------------------------------
             source "${SCRIPT_DIR}/instance_writer.sh"
             if [ -n "$instance" ] && ! instance_file_exists "$engine" "$instance"; then
-                instance_writer_create_initial FINAL_CONFIG META_DB_FIELDS
+                instance_writer_create_initial FINAL_CONFIG META_FIXED
                 log_debug "Generated instance.yml for new instance '$instance'"
             fi
 

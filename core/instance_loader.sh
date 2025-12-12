@@ -350,34 +350,25 @@ dblab_instance_load() {
     return 0
 }
 
+CORE_FIXED_KEYS=(
+    engine
+    created
+)
+
 # =============================================================
 # Fixed Attribute Extraction
-# -------------------------------------------------------------
-# engine / instance / version / network.* / image / db initial attributes
 # =============================================================
 _instance_extract_fixed() {
     local -n RAW="$1"
     local -n OUT="$2"
 
-    OUT[engine]="${RAW[engine]}"
-    OUT[instance]="${RAW[instance]}"
-    OUT[version]="${RAW[version]}"
+    # Extract fixed attributes of the engine
+    for key in "${META_FIXED[@]}"; do
+        OUT["$key"]="${RAW[$key]}"
+    done
 
-    # network.*
-    OUT[network.mode]="${RAW[network.mode]}"
-    # OUT[network.name]="${RAW[network.name]}"
-
-    OUT[image]="${RAW[image]}"
-
-    # db.*
-    OUT[db.user]="${RAW[db.user]:-}"
-    OUT[db.password]="${RAW[db.password]:-}"
-    OUT[db.database]="${RAW[db.database]}"
-    OUT[db.port]="${RAW[db.port]:-}"
-
-    # storage.*
-    OUT[storage.persistent]="${RAW[storage.persistent]}"
-    OUT[storage.data_dir]="${RAW[storage.data_dir]}"
-    OUT[storage.config_dir]="${RAW[storage.config_dir]:-}"
-    OUT[storage.log_dir]="${RAW[storage.log_dir]:-}"
+    # Extract core fixed attributes
+    for key in "${CORE_FIXED_KEYS[@]}"; do
+        OUT["$key"]="${RAW[$key]}"
+    done
 }
