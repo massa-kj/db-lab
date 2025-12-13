@@ -313,15 +313,8 @@ engine_cli() {
     # Get instance from FINAL_CONFIG (should be set by command_dispatcher)
     local instance="${C[instance]:-}"
     
-    if [[ -z "$instance" ]]; then
-        log_error "Instance name is required for CLI connection"
-        return 1
-    fi
-    
     local engine="${C[engine]}"
     local use_container="${C[sqlite.use_container]:-false}"
-    
-    log_debug "CLI connecting to instance: $instance (engine: $engine, use_container: $use_container)"
     
     # Determine which database file to use
     local cli_db_file="${C[cli.db_file]:-}"
@@ -332,6 +325,7 @@ engine_cli() {
         target_db_file="$cli_db_file"
         log_info "Using custom database file: $target_db_file"
     else
+        log_debug "CLI connecting to instance: $instance (engine: $engine, use_container: $use_container)"
         # Use default instance database file
         local data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlite/${instance}/data}"
         target_db_file="${data_dir}/${instance}${C[db.file_extension]:-.sqlite}"
@@ -422,41 +416,48 @@ engine_exec() {
     # Get instance from FINAL_CONFIG (should be set by command_dispatcher)
     local instance="${C[instance]:-}"
     
-    if [[ -z "$instance" ]]; then
-        log_error "Instance name is required for exec operation"
-        return 1
-    fi
-    
     local engine="${C[engine]}"
     local use_container="${C[sqlite.use_container]:-false}"
     
-    # Get database file path
-    local data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlite/${instance}/data}"
-    local db_file_path_host="${data_dir}/${instance}${C[db.file_extension]:-.sqlite}"
+    # Determine which database file to use
+    local exec_db_file="${C[exec.db_file]:-}"
+    local target_db_file=""
     
-    # Expand the file path placeholder manually
-    local db_file_path_container="${C[db.file_path]}"
-    db_file_path_container="${db_file_path_container//'{instance}'/$instance}"
+    if [[ -n "$exec_db_file" ]]; then
+        # Use custom database file specified in env
+        target_db_file="$exec_db_file"
+        log_info "Using custom database file: $target_db_file"
+    else
+        log_debug "EXEC connecting to instance: $instance (engine: $engine, use_container: $use_container)"
+        # Use default instance database file
+        local data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlite/${instance}/data}"
+        target_db_file="${data_dir}/${instance}${C[db.file_extension]:-.sqlite}"
+        log_info "Using default instance database: ${instance}.sqlite"
+    fi
+    
+    # Check if database file exists
+    if [[ ! -f "$target_db_file" ]]; then
+        log_error "Database file not found: $target_db_file"
+        if [[ -n "$exec_db_file" ]]; then
+            log_error "Custom database file specified in DBLAB_SQLITE_EXEC_DB_FILE does not exist"
+        else
+            log_error "Please run 'dblab up sqlite --instance $instance' first"
+        fi
+        return 1
+    fi
     
     if [[ "$use_container" == "false" ]]; then
         # Use host sqlite3 command
         if check_host_sqlite; then
-            log_debug "Using host sqlite3 command for exec"
+            log_info "Using host sqlite3 command"
             
-            # Check if database file exists
-            if [[ ! -f "$db_file_path_host" ]]; then
-                log_error "Database file not found: $db_file_path_host"
-                log_error "Please run 'dblab up sqlite --instance $instance' first"
-                return 1
-            fi
-            
-            # Execute SQL script or command on host
+            # Execute sqlite3 directly on host
             if [[ $# -eq 0 ]]; then
-                # Read from stdin and pipe to sqlite3
-                sqlite3 "$db_file_path_host"
+                # Read from stdin
+                sqlite3 "$target_db_file"
             else
-                # Execute provided command/script
-                sqlite3 "$db_file_path_host" "$@"
+                # Execute with arguments
+                sqlite3 "$target_db_file" "$@"
             fi
             return $?
         else
@@ -466,25 +467,48 @@ engine_exec() {
         fi
     fi
     
-    # Use container for exec
-    log_debug "Using container for SQLite exec"
+    # Use container for EXEC
+    log_info "Using container for SQLite EXEC"
     
     # Initialize runner
     init_runner
     
-    # Get SQLite container name
-    local sqlite_container
-    sqlite_container=$(get_container_name "$engine" "$instance")
+    # EXEC image (same as CLI image)
+    local exec_image="${C[cli_image]}"
+    local exec_workdir="${C[cli.workdir]:-/workdir}"
     
-    # Execute SQL script or command
+    # Get directory and filename of the target database
+    local db_dir="$(dirname "$target_db_file")"
+    local db_filename="$(basename "$target_db_file")"
+    
+    log_debug "Mounting directory: $db_dir -> $exec_workdir"
+    log_debug "Database file: $db_filename"
+    
+    # Use the elegant approach with proper argument handling
+    local BEFORE=()
+    local AFTER=()
+    
+    # Common container options
+    BEFORE+=(--rm)
+    BEFORE+=(-v "${db_dir}:${exec_workdir}")
+    
     if [[ $# -eq 0 ]]; then
-        # Read from stdin and pipe to container
-        local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
-        "$runtime" exec -i "$sqlite_container" sqlite3 "$db_file_path_container"
+        # Interactive mode (reading from stdin)
+        BEFORE+=(-i)
+        AFTER+=(sh -c "command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite; sqlite3 '${exec_workdir}/${db_filename}'")
     else
-        # Execute provided command/script
-        exec_container "$sqlite_container" sqlite3 "$db_file_path_container" "$@"
+        # Non-interactive mode with arguments - build full command
+        local full_cmd="command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite; sqlite3 '${exec_workdir}/${db_filename}'"
+        for arg in "$@"; do
+            # Escape single quotes in arguments
+            local escaped_arg="${arg//\'/\'\"\'\"\'}"
+            full_cmd+=" '$escaped_arg'"
+        done
+        AFTER+=(sh -c "$full_cmd")
     fi
+    
+    # Execute with runner_run2
+    runner_run2 "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
 # Export functions for testing

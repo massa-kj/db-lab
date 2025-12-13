@@ -12,9 +12,6 @@ supported:
 defaults:
   db.version: "latest"
   db.database: "main"  # Default database in SQLite
-  db.user: "sqlite"    # SQLite doesn't have users, but set for compatibility
-  db.password: ""      # SQLite doesn't use passwords
-  db.port: "0"         # SQLite doesn't use ports
   db.file_extension: ".sqlite"
   storage.persistent: true  # SQLite is file-based, so persistent by default
   network.mode: "isolated"  # Use isolated network for consistency
