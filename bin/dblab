@@ -192,7 +192,7 @@ validate_args() {
     fi
     
     case "$COMMAND" in
-        up|down|status|destroy|init|cli|exec|gui|diag)
+        up|down|status|destroy|init|diag)
             if [[ -z "$ENGINE" ]]; then
                 die "Engine is required for command '$COMMAND'"
             fi
@@ -201,7 +201,7 @@ validate_args() {
                 die "Instance name is required for command '$COMMAND'. Use --instance <name>"
             fi
             ;;
-        list|init-cli)
+        cli|exec|gui|list|init-cli)
             if [[ -z "$ENGINE" ]]; then
                 die "Engine is required for command '$COMMAND'"
             fi
