@@ -193,8 +193,31 @@ init_dblab() {
     ensure_dir "$DBLAB_BASE_DIR"
 }
 
+# Safely ensure script is executable (ignore permission errors)
+ensure_executable() {
+    local script_path="$1"
+    if [[ -f "$script_path" ]]; then
+        if [[ -w "$script_path" ]]; then
+            chmod +x "$script_path" 2>/dev/null || log_debug "Cannot change permissions for $script_path (this is normal for system installations)"
+        else
+            log_debug "Script not writable, assuming correct permissions: $script_path"
+        fi
+    else
+        die "Script not found: $script_path"
+    fi
+}
+
 # Export functions for sourcing by other modules
 export -f log log_error log_warn log_info log_debug log_trace
 export -f die trap_error ensure_dir safe_rm get_data_dir
 export -f mask_sensitive validate_instance_name validate_engine_name
 export -f command_exists get_abs_path init_dblab
+
+show_assoc_array() {
+    local dict_name="$1"
+    declare -n dict_ref="$dict_name"
+    
+    for key in "${!dict_ref[@]}"; do
+        echo "$key=${dict_ref[$key]}"
+    done
+}

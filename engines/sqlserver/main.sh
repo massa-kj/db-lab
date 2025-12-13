@@ -22,7 +22,7 @@ validate_sqlserver_env() {
     
     # Additional SQL Server-specific password complexity validation
     local sa_password
-    sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
+    sa_password="$DBLAB_SQLSERVER_SA_PASSWORD"
     
     if [[ -n "$sa_password" ]]; then
         # Check for additional complexity requirements beyond minimum length

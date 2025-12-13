@@ -10,18 +10,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 source "${SCRIPT_DIR}/yaml_parser.sh"
 
-# **duplicate**
-# Temporary storage for resolved environment
-declare -A RESOLVED_ENV=()
-# Get resolved environment value
-get_env() {
-    local key="$1"
-    local default="${2:-}"
-    
-    echo "${RESOLVED_ENV[$key]:-$default}"
-}
-export -f get_env
-
 # =============================================================
 # env_loader.sh
 # -------------------------------------------------------------
@@ -52,10 +40,6 @@ export -f get_env
 # Public functions:
 #   - env_load <engine> <meta_assoc> <instance_fixed_assoc> <out_env_assoc>
 # =============================================================
-
-# shellcheck source=./lib.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-
 
 # -------------------------------------------------------------
 # env_load <engine> <meta_assoc> <instance_fixed_assoc> <out_env_assoc>

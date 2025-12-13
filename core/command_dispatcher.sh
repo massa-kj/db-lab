@@ -22,64 +22,8 @@ source "${SCRIPT_DIR}/validator.sh"
 # Core dispatcher functions  
 # =============================================================
 
-# Safely ensure script is executable (ignore permission errors)
-ensure_executable() {
-    local script_path="$1"
-    if [[ -f "$script_path" ]]; then
-        if [[ -w "$script_path" ]]; then
-            chmod +x "$script_path" 2>/dev/null || log_debug "Cannot change permissions for $script_path (this is normal for system installations)"
-        else
-            log_debug "Script not writable, assuming correct permissions: $script_path"
-        fi
-    else
-        die "Script not found: $script_path"
-    fi
-}
-
-# Execute up command with environment validation
-dispatch_up_command() {
-    local engine="$1"
-    local instance="$2"
-    shift 2
-    local env_files=("$@")
-    
-    log_info "Starting $engine instance: $instance"
-    
-    # Get engine metadata for validation
-    local project_dir="$(dirname "$SCRIPT_DIR")"
-    local engines_dir="${project_dir}/engines"
-    local metadata_file="${engines_dir}/${engine}/metadata.yml"
-    
-    if [[ ! -f "$metadata_file" ]]; then
-        die "Engine metadata not found: $metadata_file"
-    fi
-    
-    # Validate environment files if provided
-    if [[ ${#env_files[@]} -gt 0 ]]; then
-        # Source environment validation functions
-        source "${SCRIPT_DIR}/env_template.sh"
-        
-        for env_file in "${env_files[@]}"; do
-            log_debug "Validating environment file: $env_file"
-            if ! validate_env_file "$env_file" "$metadata_file"; then
-                die "Environment validation failed for: $env_file"
-            fi
-        done
-    fi
-    
-    # Set expose environment variables if specified
-    if [[ -n "${EXPOSE_PORTS:-}" ]]; then
-        export DBLAB_EXPOSE_ENABLED="true"
-        export DBLAB_EXPOSE_PORTS="$EXPOSE_PORTS"
-        log_debug "Port exposure enabled: $EXPOSE_PORTS"
-    fi
-    
-    # Execute the up command
-    # dispatch_engine_command "up" "$engine" "$instance" "${env_files[@]}"
-}
-
 # Execute list command with enhanced functionality
-dispatch_list_command() {
+_dispatch_list_command() {
     local engine="$1"
     local verbose_mode="${2:-false}"
     
@@ -262,7 +206,7 @@ dblab_dispatch_command() {
             fi
             ;;
         list)
-            dispatch_list_command "$engine" "$VERBOSE_MODE"
+            _dispatch_list_command "$engine" "$VERBOSE_MODE"
             ;;
         *)
             log_error "Unknown command: $command"
