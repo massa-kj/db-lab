@@ -62,28 +62,6 @@ engine_up() {
         return 0
     fi
     
-    # Check if instance exists
-    # local instance_exists=false
-    # if instance_exists "$ENGINE_NAME" "$instance"; then
-    #     log_debug "Loading existing instance: $instance"
-    #     load_instance "$ENGINE_NAME" "$instance"
-    #     instance_exists=true
-    # else
-    #     log_debug "Creating new instance: $instance"
-        
-    #     # Create new instance
-    #     local version user password database network_mode ephemeral
-    #     version=$(get_env "DBLAB_PG_VERSION")
-    #     user=$(get_env "DBLAB_PG_USER")
-    #     password=$(get_env "DBLAB_PG_PASSWORD")
-    #     database=$(get_env "DBLAB_PG_DATABASE")
-    #     network_mode=$(get_env "DBLAB_NETWORK_MODE" "isolated")
-    #     ephemeral=$(get_env "DBLAB_EPHEMERAL" "false")
-        
-    #     create_instance "$ENGINE_NAME" "$instance" "$version" "$user" "$password" "$database" "$network_mode" "$ephemeral"
-    #     load_instance "$ENGINE_NAME" "$instance"
-    # fi
-    
     # Get instance configuration
     local data_dir network_name version image
     data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/postgres/${instance}/data}"
