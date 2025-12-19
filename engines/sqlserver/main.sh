@@ -185,7 +185,7 @@ engine_up() {
         fi
     fi
 
-    runner_run2 "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 
     # Wait for SQL Server to be ready
     if ! wait_for_sqlserver "$container_name" 60 "${C[db.password]}" "${C[db.version]}"; then
@@ -277,7 +277,7 @@ engine_cli() {
         AFTER+=("$arg")
     done
     
-    runner_run2 "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
 # Export functions for testing

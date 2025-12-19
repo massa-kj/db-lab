@@ -247,7 +247,7 @@ engine_up() {
     
     AFTER+=(sh -c "apk add --no-cache sqlite && while true; do sleep 3600; done")
 
-    runner_run2 "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 
     # Wait for SQLite container to be ready
     if ! wait_for_sqlite "$container_name" "$db_file_path_container" 30; then
@@ -404,7 +404,7 @@ engine_cli() {
         AFTER+=(sh -c "$full_cmd")
     fi
     
-    runner_run2 "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
 # Execute SQL script or command
@@ -512,8 +512,7 @@ engine_exec() {
         AFTER+=(sh -c "$full_cmd")
     fi
     
-    # Execute with runner_run2
-    runner_run2 "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
 # Helper function for file/directory execution using exec-utils
@@ -615,7 +614,7 @@ _sqlite_exec_files_container() {
     
     local AFTER=(sh -c "$full_cmd")
     
-    runner_run2 "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
 # Export functions for testing

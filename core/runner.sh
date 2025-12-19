@@ -455,53 +455,6 @@ runner_init() {
 ## Public functions
 ##
 
-runner_run() {
-  runner_init
-  local image="$1"
-  shift || true
-
-  # NOTE:
-  #   - Docker/Podman syntax: docker run [OPTIONS] IMAGE [COMMAND] [ARG...]
-  #   - We need to separate Docker options from the command to run in the container
-  #   - Everything up to the first non-option argument (doesn't start with -) is Docker options
-  #   - Everything after that is the command and its arguments
-  
-  local docker_args=()
-  local command_args=()
-  local parsing_docker_opts=true
-  
-  # Parse arguments to separate Docker options from container command
-  while [[ $# -gt 0 ]]; do
-    if [[ "$parsing_docker_opts" == "true" ]] && [[ "$1" =~ ^- ]]; then
-      # This is a Docker option
-      docker_args+=("$1")
-      # Check if this option takes a value (either separate or --option=value format)
-      if [[ "$1" =~ ^(-e|--env|--name|--network|-v|--volume|--mount|--workdir|--user|--entrypoint)$ ]] && [[ $# -gt 1 ]]; then
-        shift
-        docker_args+=("$1")
-      elif [[ "$1" =~ ^(-e=|--env=|--name=|--network=|-v=|--volume=|--mount=|--workdir=|--user=|--entrypoint=) ]]; then
-        # Option already contains the value (--option=value format), no need to shift again
-        :
-      fi
-    else
-      # This is the start of the command to run in the container
-      parsing_docker_opts=false
-      command_args+=("$1")
-    fi
-    shift
-  done
-  
-  local common_args
-  common_args="$(_runner__common_run_args)"
-  
-  # Execute with proper argument handling: docker run [COMMON_ARGS] [DOCKER_ARGS] IMAGE [COMMAND_ARGS]
-  if [[ -n "$common_args" ]]; then
-    "$RUNNER_BIN" run $common_args "${docker_args[@]}" "$image" "${command_args[@]}"
-  else
-    "$RUNNER_BIN" run "${docker_args[@]}" "$image" "${command_args[@]}"
-  fi
-}
-
 # ------------------------------------------------------------
 # runner_run
 #   Usage:
@@ -514,7 +467,7 @@ runner_run() {
 #         --after "postgres" \
 #         --after "--config=/etc/postgresql.conf"
 # ------------------------------------------------------------
-runner_run2() {
+runner_run() {
     local image="$1"; shift
 
     local BEFORE=()

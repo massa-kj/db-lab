@@ -142,7 +142,7 @@ engine_up() {
         fi
     fi
 
-    runner_run2 "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+    runner_run "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
     
     # Wait for PostgreSQL to be ready
     if ! wait_for_postgres "$container_name"; then
