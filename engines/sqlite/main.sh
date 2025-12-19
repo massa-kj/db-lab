@@ -235,19 +235,20 @@ engine_up() {
     
     log_info "Starting temporary SQLite container for database initialization: $container_name"
     
-    # Build command arguments for temporary container
-    local run_args=(
-        "--name" "${container_name}"
-        "--network" "${network_name}"
-        "-d"
-        # Mount data directory to /data in container
-        "-v" "${data_dir}:/data"
-    )
+    local BEFORE=()
+    local AFTER=()
     
-    # Run container with infinite loop to keep it alive temporarily
-    # Install sqlite3 and then keep container running
-    runner_run "${image}" "${run_args[@]}" sh -c "apk add --no-cache sqlite && while true; do sleep 3600; done"
+    # Common container options
+    BEFORE+=(--name "${container_name}")
+    BEFORE+=(--network "${network_name}")
+    BEFORE+=(-d)
+    # Mount data directory to /data in container
+    BEFORE+=(-v "${data_dir}:/data")
     
+    AFTER+=(sh -c "apk add --no-cache sqlite && while true; do sleep 3600; done")
+
+    runner_run2 "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+
     # Wait for SQLite container to be ready
     if ! wait_for_sqlite "$container_name" "$db_file_path_container" 30; then
         log_error "SQLite container startup failed"
@@ -381,7 +382,6 @@ engine_cli() {
     log_debug "Mounting directory: $db_dir -> $cli_workdir"
     log_debug "Database file: $db_filename"
     
-    # Use the elegant approach you suggested with proper argument handling
     local BEFORE=()
     local AFTER=()
     
@@ -404,7 +404,6 @@ engine_cli() {
         AFTER+=(sh -c "$full_cmd")
     fi
     
-    # Execute with runner_run2
     runner_run2 "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 

@@ -145,28 +145,27 @@ engine_up() {
     
     log_info "Starting SQL Server container: $container_name"
     
-    # Build command arguments
-    local run_args=(
-        "--name" "${container_name}"
-        "--network" "${network_name}"
-        "-d"
-        # SQL Server environment variables
-        "-e" "ACCEPT_EULA=Y"
-        "-e" "MSSQL_SA_PASSWORD=${C[db.password]}"
-        "-e" "MSSQL_PID=${C[db.pid]:-Express}"
-        "-e" "MSSQL_TCP_PORT=${C[db.port]}"
-        # Data volume mount
-        "-v" "${C[storage.data_dir]}:/var/opt/mssql"
-    )
+    local BEFORE=()
+    local AFTER=()
+    
+    BEFORE+=(--name "${container_name}")
+    BEFORE+=(--network "${network_name}")
+    BEFORE+=(-d)
+    # SQL Server environment variables
+    BEFORE+=(-e "ACCEPT_EULA=Y")
+    BEFORE+=(-e "MSSQL_SA_PASSWORD=${C[db.password]}")
+    BEFORE+=(-e "MSSQL_PID=${C[db.pid]:-Express}")
+    BEFORE+=(-e "MSSQL_TCP_PORT=${C[db.port]}")
+    # Data volume mount
+    BEFORE+=(-v "${C[storage.data_dir]}:/var/opt/mssql")
 
     # Add memory limit if specified
     local memory_limit="${C[runtime.resources.memory]:-}"
     if [[ -n "$memory_limit" ]]; then
-        run_args+=("--memory=${memory_limit}")
+        BEFORE+=("--memory=${memory_limit}")
     fi
 
-    # Run as root to avoid permission issues  
-    run_args+=("--user=0:0")
+    BEFORE+=("--user=0:0")
 
     # Expose port if specified
     local expose_enabled
@@ -182,11 +181,11 @@ engine_up() {
                 expose_ports="${expose_ports}:${expose_ports}"
                 log_debug "Expanded port mapping to: $expose_ports"
             fi
-            run_args+=("-p" "$expose_ports")
+            BEFORE+=("-p" "$expose_ports")
         fi
     fi
 
-    runner_run "${image}" "${run_args[@]}"
+    runner_run2 "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 
     # Wait for SQL Server to be ready
     if ! wait_for_sqlserver "$container_name" 60 "${C[db.password]}" "${C[db.version]}"; then

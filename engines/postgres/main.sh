@@ -113,16 +113,16 @@ engine_up() {
     
     log_info "Starting PostgreSQL container: $container_name"
     
-    # Build command arguments
-    local run_args=(
-        "--name" "${container_name}"
-        "--network" "${network_name}"
-        "-d"
-        "-e" "POSTGRES_USER=${C[db.user]}"
-        "-e" "POSTGRES_PASSWORD=${C[db.password]}"
-        "-e" "POSTGRES_DB=${C[db.database]}"
-        "-v" "${C[storage.data_dir]}:/var/lib/postgresql/data"
-    )
+    local BEFORE=()
+    local AFTER=()
+    
+    BEFORE+=(--name "${container_name}")
+    BEFORE+=(--network "${network_name}")
+    BEFORE+=(-d)
+    BEFORE+=(-e "POSTGRES_USER=${C[db.user]}")
+    BEFORE+=(-e "POSTGRES_PASSWORD=${C[db.password]}")
+    BEFORE+=(-e "POSTGRES_DB=${C[db.database]}")
+    BEFORE+=(-v "${C[storage.data_dir]}:/var/lib/postgresql/data")
 
     # Expose port if specified
     local expose_enabled
@@ -138,11 +138,11 @@ engine_up() {
                 expose_ports="${expose_ports}:${expose_ports}"
                 log_debug "Expanded port mapping to: $expose_ports"
             fi
-            run_args+=("-p" "$expose_ports")
+            BEFORE+=("-p" "$expose_ports")
         fi
     fi
 
-    runner_run "${image}" "${run_args[@]}"
+    runner_run2 "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
     
     # Wait for PostgreSQL to be ready
     if ! wait_for_postgres "$container_name"; then
