@@ -415,12 +415,11 @@ engine_exec() {
 
     # Get instance from FINAL_CONFIG (should be set by command_dispatcher)
     local instance="${C[instance]:-}"
-    
     local engine="${C[engine]}"
     local use_container="${C[sqlite.use_container]:-false}"
     
     # Determine which database file to use
-    local exec_db_file="${C[exec.db_file]:-}"
+    local exec_db_file="${C[cli.db_file]:-}"
     local target_db_file=""
     
     if [[ -n "$exec_db_file" ]]; then
@@ -445,7 +444,14 @@ engine_exec() {
         fi
         return 1
     fi
-    
+
+    # Handle file/directory execution with exec-utils
+    if [[ $# -eq 1 && (-f "$1" || -d "$1") ]]; then
+        _sqlite_exec_files "$target_db_file" "$1" "$use_container" "C"
+        return $?
+    fi
+
+    # Handle direct execution (original logic)
     if [[ "$use_container" == "false" ]]; then
         # Use host sqlite3 command
         if check_host_sqlite; then
@@ -467,7 +473,7 @@ engine_exec() {
         fi
     fi
     
-    # Use container for EXEC
+    # Use container for direct execution (original logic)
     log_info "Using container for SQLite EXEC"
     
     # Initialize runner
@@ -508,6 +514,108 @@ engine_exec() {
     fi
     
     # Execute with runner_run2
+    runner_run2 "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
+}
+
+# Helper function for file/directory execution using exec-utils
+_sqlite_exec_files() {
+    local target_db_file="$1"
+    local target_path="$2"
+    local use_container="$3"
+    local config_ref="$4"
+    
+    # Source only the exec-utils functions we need
+    source "${CORE_DIR}/exec-utils.sh"
+    
+    log_info "Executing SQL files from: $target_path"
+    
+    # Collect SQL files using exec-utils
+    local files=()
+    while IFS= read -r file; do
+        files+=("$file")
+    done < <(collect_exec_files "$target_path")
+    
+    if [[ ${#files[@]} -eq 0 ]]; then
+        log_warn "No SQL files found to execute"
+        return 0
+    fi
+    
+    # Show execution plan using exec-utils
+    print_exec_plan "${files[@]}"
+    
+    if [[ "$use_container" == "false" ]]; then
+        # Host mode execution
+        local total=${#files[@]}
+        for i in "${!files[@]}"; do
+            local file="${files[i]}"
+            log_info "[$((i+1))/$total] Executing: $(basename "$file")"
+            
+            if ! sqlite3 "$target_db_file" < "$file"; then
+                log_error "Failed to execute: $(basename "$file")"
+                return 1
+            fi
+            
+            log_debug "Successfully executed: $(basename "$file")"
+        done
+    else
+        # Container mode execution - execute all files in a single container
+        _sqlite_exec_files_container "$target_db_file" "$target_path" "${files[@]}" "$config_ref"
+    fi
+    
+    log_info "All SQL files executed successfully"
+}
+
+# Helper for executing multiple files in container (batch mode)
+_sqlite_exec_files_container() {
+    local target_db_file="$1"
+    local sql_base_dir="$2"
+    shift 2
+    local config_ref="${@: -1}"  # Last argument is config reference
+    local files=("${@:1:$#-1}")  # All arguments except the last one
+    
+    # Create local reference to config
+    local -n CONFIG_REF="$config_ref"
+    
+    init_runner
+    
+    local exec_image="${CONFIG_REF[cli_image]}"
+    local exec_workdir="${CONFIG_REF[cli.workdir]:-/workdir}"
+    local db_dir="$(dirname "$target_db_file")"
+    local db_filename="$(basename "$target_db_file")"
+    
+    # Determine the base directory to mount
+    # If target_path is a file, use its directory; if directory, use it directly
+    local sql_mount_dir
+    if [[ -f "$sql_base_dir" ]]; then
+        sql_mount_dir="$(dirname "$sql_base_dir")"
+    else
+        sql_mount_dir="$(realpath "$sql_base_dir")"
+    fi
+    
+    log_debug "Mounting SQL directory: $sql_mount_dir -> /sql"
+    log_debug "Mounting DB directory: $db_dir -> $exec_workdir"
+    
+    # Build the SQL execution script
+    local sql_script=""
+    for file in "${files[@]}"; do
+        # Calculate relative path from sql_mount_dir to file
+        local relative_path
+        relative_path="$(realpath --relative-to="$sql_mount_dir" "$file")"
+        sql_script+=".read /sql/$relative_path"$'\n'
+    done
+    
+    # Execute all files in a single container with proper mounts
+    local BEFORE=(
+        --rm 
+        -v "${db_dir}:${exec_workdir}" 
+        -v "${sql_mount_dir}:/sql"
+    )
+    
+    # Create a command that installs sqlite3 and executes all files
+    local full_cmd="command -v sqlite3 >/dev/null 2>&1 || apk add --no-cache sqlite; sqlite3 '${exec_workdir}/${db_filename}' << 'EOF'"$'\n'"${sql_script}EOF"
+    
+    local AFTER=(sh -c "$full_cmd")
+    
     runner_run2 "${exec_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 
