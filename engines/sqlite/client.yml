@@ -30,7 +30,7 @@ env_vars:
     description: "Use container for CLI operations instead of host sqlite3 command (true/false)"
   - name: DBLAB_NETWORK_MODE
     map: network.mode
-    description: "Network mode for the container"
+    description: "Network mode for the container (isolated | engine_shared)"
   - name: DBLAB_EPHEMERAL
     map: storage.persistent
     description: "If false, database files will be deleted on down"

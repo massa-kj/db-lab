@@ -22,7 +22,7 @@ env_vars:
     description: "SQL Server client command"
   - name: DBLAB_SQLSERVER_HOST
     map: db.host
-    description: "Host for SQL Server"
+    description: "SQL Server host (container name, or external hostname/IP)"
   - name: DBLAB_SQLSERVER_PORT
     map: db.port
     description: "Port for SQL Server"
@@ -38,7 +38,7 @@ env_vars:
     description: "Initial database name"
   - name: DBLAB_NETWORK_MODE
     map: network.mode
-    description: "Network mode for the container"
+    description: "Network mode for the container (isolated | engine_shared)"
   - name: DBLAB_EXPOSE_ENABLED
     map: runtime.expose.enabled
     description: "Whether to expose the database port"
