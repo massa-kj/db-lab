@@ -14,9 +14,9 @@ defaults:
   # network.name: "dblab_{instance}_isolated"
 
 env_vars:
-  - name: DBLAB_SQLSERVER_IMAGE
+  - name: DBLAB_SQLSERVER_CLI_IMAGE
     map: cli_image
-    description: "Docker image for SQL Server"
+    description: "Docker image for SQL Server client"
   - name: DBLAB_SQLSERVER_CLIENT_COMMAND
     map: cli_command
     description: "SQL Server client command"
