@@ -304,3 +304,20 @@ _remove_instance_config_only() {
     
     log_debug "Configuration files removed, data directory preserved"
 }
+
+default_engine_list() {
+    local engine="$1"
+    local verbose_mode="${2:-false}"
+    
+    log_info "Listing $engine instances"
+    
+    # Source necessary modules for enhanced list functionality
+    source "${SCRIPT_DIR}/instance_manager.sh"
+    source "${SCRIPT_DIR}/runner.sh"
+    
+    # Initialize runner to get container status functions
+    init_runner 2>/dev/null || true
+    
+    # Call the list instances function
+    list_instances "$engine" "$verbose_mode"
+}

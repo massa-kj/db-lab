@@ -13,7 +13,6 @@ ENGINES_DIR="${PROJECT_DIR}/engines"
 source "${SCRIPT_DIR}/lib.sh"
 source "${SCRIPT_DIR}/metadata_loader.sh"
 source "${SCRIPT_DIR}/instance_loader.sh"
-source "${SCRIPT_DIR}/instance_manager.sh"
 source "${SCRIPT_DIR}/env_loader.sh"
 source "${SCRIPT_DIR}/merge_layers.sh"
 source "${SCRIPT_DIR}/config_interpolator.sh"
@@ -22,25 +21,6 @@ source "${SCRIPT_DIR}/validator.sh"
 # =============================================================
 # Core dispatcher functions  
 # =============================================================
-
-# Execute list command with enhanced functionality
-_dispatch_list_command() {
-    local engine="$1"
-    local verbose_mode="${2:-false}"
-    
-    log_info "Listing $engine instances"
-    
-    # Source necessary modules for enhanced list functionality
-    source "${SCRIPT_DIR}/instance_manager.sh"
-    source "${SCRIPT_DIR}/runner.sh"
-    
-    # Initialize runner to get container status functions
-    init_runner 2>/dev/null || true
-    
-    # Call the list instances function
-    list_instances "$engine" "$verbose_mode"
-}
-
 dblab_dispatch_command() {
     local command="$1"
     local engine="$2"
@@ -192,7 +172,6 @@ dblab_dispatch_command() {
         status)
             log_info "Checking status of $engine instance: $instance"
             
-            # Check if engine has status function
             if declare -F "engine_status" >/dev/null; then
                 # Engine has status implementation, call it directly
                 local status
@@ -207,7 +186,14 @@ dblab_dispatch_command() {
             fi
             ;;
         list)
-            _dispatch_list_command "$engine" "$VERBOSE_MODE"
+            if declare -F "engine_list" >/dev/null; then
+                # Engine has list implementation, call it directly
+                engine_list FINAL_CONFIG "$VERBOSE_MODE"
+            else
+                # Use default list implementation
+                source "${SCRIPT_DIR}/engine_defaults.sh"
+                default_engine_list "$engine" "$VERBOSE_MODE"
+            fi
             ;;
         *)
             log_error "Unknown command: $command"
