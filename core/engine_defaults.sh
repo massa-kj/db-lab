@@ -9,8 +9,7 @@ set -euo pipefail
 DEFAULTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${DEFAULTS_DIR}/lib.sh"
 source "${DEFAULTS_DIR}/runner.sh"
-# source "${DEFAULTS_DIR}/network.sh"
-source "${DEFAULTS_DIR}/instance_loader.sh"
+source "${DEFAULTS_DIR}/instance_manager.sh"
 source "${DEFAULTS_DIR}/instance_writer.sh"
 
 default_engine_down() {

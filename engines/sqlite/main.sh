@@ -12,6 +12,7 @@ source "${CORE_DIR}/lib.sh"
 source "${CORE_DIR}/runner.sh"
 source "${CORE_DIR}/network.sh"
 source "${CORE_DIR}/validator.sh"
+source "${CORE_DIR}/instance_manager.sh"
 
 # Source engine-specific validators
 source "${SQLITE_DIR}/validator.sh"

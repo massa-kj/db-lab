@@ -13,6 +13,7 @@ ENGINES_DIR="${PROJECT_DIR}/engines"
 source "${SCRIPT_DIR}/lib.sh"
 source "${SCRIPT_DIR}/metadata_loader.sh"
 source "${SCRIPT_DIR}/instance_loader.sh"
+source "${SCRIPT_DIR}/instance_manager.sh"
 source "${SCRIPT_DIR}/env_loader.sh"
 source "${SCRIPT_DIR}/merge_layers.sh"
 source "${SCRIPT_DIR}/config_interpolator.sh"
@@ -30,7 +31,7 @@ _dispatch_list_command() {
     log_info "Listing $engine instances"
     
     # Source necessary modules for enhanced list functionality
-    source "${SCRIPT_DIR}/instance_loader.sh"
+    source "${SCRIPT_DIR}/instance_manager.sh"
     source "${SCRIPT_DIR}/runner.sh"
     
     # Initialize runner to get container status functions
