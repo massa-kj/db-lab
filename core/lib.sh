@@ -40,7 +40,7 @@ should_log() {
     local current_level
     current_level=$(get_log_level)
     local target_level="${LOG_LEVELS[$level]:-3}"
-    
+
     [[ $target_level -le $current_level ]]
 }
 
@@ -48,15 +48,15 @@ should_log() {
 log() {
     local level="$1"
     shift
-    
+
     if ! should_log "$level"; then
         return 0
     fi
-    
+
     local timestamp
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
     local color=""
-    
+
     case "$level" in
         error) color="$RED" ;;
         warn)  color="$YELLOW" ;;
@@ -64,7 +64,7 @@ log() {
         debug) color="$BLUE" ;;
         trace) color="$GRAY" ;;
     esac
-    
+
     printf "${color}[%s] %s: %s${NC}\n" "$timestamp" "$level" "$*" >&2
 }
 
@@ -84,26 +84,26 @@ die() {
 # Safe error handling with optional cleanup function
 trap_error() {
     local cleanup_func="${1:-}"
-    
+
     trap_cleanup() {
         local exit_code=$?
         log_error "Unexpected error occurred (exit code: $exit_code)"
-        
+
         if [[ -n "$cleanup_func" && "$(type -t "$cleanup_func")" == "function" ]]; then
             log_debug "Running cleanup function: $cleanup_func"
             "$cleanup_func" || log_warn "Cleanup function failed"
         fi
-        
+
         exit $exit_code
     }
-    
+
     trap trap_cleanup ERR
 }
 
 # Path utilities
 ensure_dir() {
     local dir="$1"
-    
+
     if [[ ! -d "$dir" ]]; then
         mkdir -p "$dir" || die "Failed to create directory: $dir"
     fi
@@ -112,16 +112,16 @@ ensure_dir() {
 # Safe path operations
 safe_rm() {
     local path="$1"
-    
+
     # Safety checks
     if [[ -z "$path" || "$path" == "/" || "$path" == "$HOME" ]]; then
         die "Refusing to remove dangerous path: $path"
     fi
-    
+
     if [[ ! -e "$path" ]]; then
         return 0
     fi
-    
+
     rm -rf "$path" || die "Failed to remove: $path"
 }
 
@@ -129,11 +129,11 @@ safe_rm() {
 get_data_dir() {
     local engine="$1"
     local instance="$2"
-    
+
     if [[ -z "$engine" || -z "$instance" ]]; then
         die "Engine and instance are required for data directory"
     fi
-    
+
     echo "${DBLAB_BASE_DIR}/${engine}/${instance}"
 }
 
@@ -141,23 +141,23 @@ get_data_dir() {
 mask_sensitive() {
     local text="$1"
     local patterns=(
-        "password=[^&[:space:]]*" 
+        "password=[^&[:space:]]*"
         "://[^:]*:[^@]*@"  # URLs with credentials
         "DBLAB_.*_PASSWORD=[^[:space:]]*"
         "token=[^&[:space:]]*"
     )
-    
+
     for pattern in "${patterns[@]}"; do
         text=$(echo "$text" | sed -E "s|$pattern|****|g")
     done
-    
+
     echo "$text"
 }
 
 # Validate instance name format
 validate_instance_name() {
     local instance="$1"
-    
+
     if [[ ! "$instance" =~ ^[a-z0-9][a-z0-9_-]{0,30}$ ]]; then
         die "Invalid instance name: $instance. Must match [a-z0-9][a-z0-9_-]{0,30}"
     fi
@@ -166,7 +166,7 @@ validate_instance_name() {
 # Validate engine name format
 validate_engine_name() {
     local engine="$1"
-    
+
     if [[ ! "$engine" =~ ^[a-z0-9]+$ ]]; then
         die "Invalid engine name: $engine. Must match [a-z0-9]+"
     fi
@@ -180,7 +180,7 @@ command_exists() {
 # Get absolute path
 get_abs_path() {
     local path="$1"
-    
+
     if [[ "$path" = /* ]]; then
         echo "$path"
     else
@@ -216,7 +216,7 @@ export -f command_exists get_abs_path init_dblab
 show_assoc_array() {
     local dict_name="$1"
     declare -n dict_ref="$dict_name"
-    
+
     for key in "${!dict_ref[@]}"; do
         echo "$key=${dict_ref[$key]}"
     done

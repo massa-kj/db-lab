@@ -14,23 +14,23 @@ source "${SCRIPT_DIR}/yaml_parser.sh"
 validate_env_against_metadata() {
     local metadata_file="$1"
     local env_prefix="$2"  # e.g., "DBLAB_PG_"
-    
+
     log_debug "Validating environment against metadata: $metadata_file"
-    
+
     if [[ ! -f "$metadata_file" ]]; then
         log_error "Metadata file not found: $metadata_file"
         return 1
     fi
-    
+
     local validation_failed=false
-    
+
     # Check required environment variables
     local required_vars
     required_vars=$(parse_yaml_array "$metadata_file" "required_env")
-    
+
     while IFS= read -r var_name; do
         [[ -z "$var_name" ]] && continue
-        
+
         # Check if variable exists in RESOLVED_ENV array or environment
         local var_value=""
         if [[ -n "${RESOLVED_ENV[$var_name]:-}" ]]; then
@@ -38,24 +38,24 @@ validate_env_against_metadata() {
         elif [[ -n "${!var_name:-}" ]]; then
             var_value="${!var_name}"
         fi
-        
+
         if [[ -z "$var_value" ]]; then
             log_error "Required environment variable not set: $var_name"
             validation_failed=true
         fi
     done <<< "$required_vars"
-    
+
     # Apply validation rules if present
     if grep -q "^validation:" "$metadata_file"; then
         if ! _apply_validation_rules "$metadata_file" "$env_prefix"; then
             validation_failed=true
         fi
     fi
-    
+
     if [[ "$validation_failed" == "true" ]]; then
         return 1
     fi
-    
+
     log_debug "Environment validation successful against metadata: $metadata_file"
     return 0
 }
@@ -64,17 +64,17 @@ validate_env_against_metadata() {
 _apply_validation_rules() {
     local metadata_file="$1"
     local env_prefix="$2"
-    
+
     local validation_rules
     validation_rules=$(parse_yaml_section "$metadata_file" "validation")
     local validation_failed=false
-    
+
     while IFS='=' read -r key value; do
         [[ -z "$key" ]] && continue
-        
+
         # Remove surrounding quotes from value
         value=$(echo "$value" | sed 's/^["'\'']*//;s/["'\'']*$//')
-        
+
         case "$key" in
             "user_regex")
                 local user_var="${env_prefix}USER"
@@ -84,7 +84,7 @@ _apply_validation_rules() {
                 elif [[ -n "${!user_var:-}" ]]; then
                     user_value="${!user_var}"
                 fi
-                
+
                 if [[ -n "$user_value" ]]; then
                     if ! echo "$user_value" | grep -qE "$value"; then
                         log_error "Invalid user format: $user_value (must match: $value)"
@@ -100,7 +100,7 @@ _apply_validation_rules() {
                 elif [[ -n "${!db_var:-}" ]]; then
                     db_value="${!db_var}"
                 fi
-                
+
                 if [[ -n "$db_value" ]]; then
                     if ! echo "$db_value" | grep -qE "$value"; then
                         log_error "Invalid database name format: $db_value (must match: $value)"
@@ -124,7 +124,7 @@ _apply_validation_rules() {
                         pass_value="${!pass_var}"
                     fi
                 fi
-                
+
                 if [[ -n "$pass_value" ]]; then
                     local pass_length=${#pass_value}
                     if [[ "$pass_length" -lt "$value" ]]; then
@@ -135,7 +135,7 @@ _apply_validation_rules() {
                 ;;
         esac
     done <<< "$validation_rules"
-    
+
     [[ "$validation_failed" != "true" ]]
 }
 

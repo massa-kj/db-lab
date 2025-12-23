@@ -22,7 +22,7 @@ defaults:
   storage.log_dir: "{XDG_DATA_HOME}/dblab/sqlite/{instance}/logs"
   storage.backup_dir: "{XDG_DATA_HOME}/dblab/sqlite/{instance}/backup"
   db.file_path: "/data/{instance}{db.file_extension}"
-  # Container image with sqlite3 
+  # Container image with sqlite3
   image: "alpine:latest"
   cli_image: "alpine:latest"
   cli_command: "sqlite3"

@@ -20,31 +20,31 @@ readonly ENGINE_NAME="sqlserver"
 # Validate SQL Server-specific environment
 validate_sqlserver_env() {
     log_debug "Validating SQL Server environment using metadata"
-    
+
     # Additional SQL Server-specific password complexity validation
     local sa_password
     sa_password="$DBLAB_SQLSERVER_SA_PASSWORD"
-    
+
     if [[ -n "$sa_password" ]]; then
         # Check for additional complexity requirements beyond minimum length
         local has_upper=false has_lower=false has_digit=false has_special=false
-        
+
         if [[ "$sa_password" =~ [A-Z] ]]; then has_upper=true; fi
         if [[ "$sa_password" =~ [a-z] ]]; then has_lower=true; fi
         if [[ "$sa_password" =~ [0-9] ]]; then has_digit=true; fi
         if [[ "$sa_password" =~ [^a-zA-Z0-9] ]]; then has_special=true; fi
-        
+
         local complexity_count=0
         [[ "$has_upper" == "true" ]] && ((complexity_count=complexity_count+1))
         [[ "$has_lower" == "true" ]] && ((complexity_count=complexity_count+1))
         [[ "$has_digit" == "true" ]] && ((complexity_count=complexity_count+1))
         [[ "$has_special" == "true" ]] && ((complexity_count=complexity_count+1))
-        
+
         if [[ $complexity_count -lt 3 ]]; then
             die "SQL Server SA password must contain at least 3 of: uppercase, lowercase, digits, special characters"
         fi
     fi
-    
+
     log_debug "SQL Server environment validation passed"
 }
 
@@ -66,12 +66,12 @@ wait_for_sqlserver() {
     local sa_password="${3:-}"
     local version="${4:-}"
     local attempt=1
-    
+
     log_info "Waiting for SQL Server to be ready (this may take a few minutes)..."
-    
+
     while [[ $attempt -le $max_attempts ]]; do
         log_debug "Health check attempt $attempt/$max_attempts"
-        
+
         # Use sqlcmd to check SQL Server readiness
         local sa_password version sqlcmd_path
         # sa_password=$(get_env "DBLAB_SQLSERVER_SA_PASSWORD")
@@ -84,12 +84,12 @@ wait_for_sqlserver() {
             log_info "SQL Server is ready!"
             return 0
         fi
-        
+
         log_debug "SQL Server not ready yet, waiting..."
         sleep 5
         ((attempt++))
     done
-    
+
     log_error "SQL Server failed to become ready within $((max_attempts * 5)) seconds"
     return 1
 }
@@ -97,26 +97,26 @@ wait_for_sqlserver() {
 # Start SQL Server instance
 engine_up() {
     local -n C="$1"
-    
+
     local engine="${C[engine]}"
     local instance="${C[instance]}"
-    
+
     log_info "Starting SQL Server instance: $instance"
-    
+
     # Initialize runner first
     init_runner
-    
+
     local container_name
     container_name=$(get_container_name "$engine" "$instance")
-    
+
     # validate_sqlserver_env
-    
+
     # Check if container is already running
     if container_running "$container_name"; then
         log_info "Container is already running: $container_name"
         return 0
     fi
-    
+
     # Get instance configuration
     local data_dir network_name image
     data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/sqlserver/${instance}/data}"
@@ -128,27 +128,27 @@ engine_up() {
         network_name=$(get_network_name "$engine" "$instance" "$network_mode")
     fi
     image="${C[image]}"
-    
+
     # Ensure directories exist
     ensure_dir "$data_dir"
-    
+
     # Create network if it doesn't exist
     create_network "$network_name"
-    
+
     # Ensure image is available
     ensure_image "$image"
-    
+
     # Remove existing stopped container if exists
     if container_exists "$container_name" && ! container_running "$container_name"; then
         log_debug "Removing existing stopped container: $container_name"
         remove_container "$container_name"
     fi
-    
+
     log_info "Starting SQL Server container: $container_name"
-    
+
     local BEFORE=()
     local AFTER=()
-    
+
     BEFORE+=(--name "${container_name}")
     BEFORE+=(--network "${network_name}")
     BEFORE+=(-d)
@@ -176,7 +176,7 @@ engine_up() {
         expose_ports="${C[runtime.expose.ports]:-}"
 
         if [[ -n "$expose_ports" ]]; then
-            # If port is specified without host port (e.g., "1433"), 
+            # If port is specified without host port (e.g., "1433"),
             # map it to the same host port (e.g., "1433:1433")
             if [[ "$expose_ports" =~ ^[0-9]+$ ]]; then
                 expose_ports="${expose_ports}:${expose_ports}"
@@ -191,23 +191,23 @@ engine_up() {
     # Wait for SQL Server to be ready
     if ! wait_for_sqlserver "$container_name" 60 "${C[db.password]}" "${C[db.version]}"; then
         log_error "SQL Server startup failed"
-        
+
         # Show logs for debugging
         log_error "Container logs:"
         get_container_logs "$container_name" 50
-        
+
         # Stop and remove failed container
         stop_container "$container_name"
         remove_container "$container_name" true
-        
+
         die "SQL Server startup failed"
     fi
-    
+
     # Update instance state
     update_state_up "$engine" "$instance"
-    
+
     log_info "SQL Server instance '$instance' started successfully"
-    
+
     # Show connection information
     log_info "Connection details:"
     log_info "  Host: $container_name (in network: $network_name)"
@@ -228,7 +228,7 @@ engine_cli() {
 
     local BEFORE=()
     local AFTER=()
-    
+
     # local host="${C[db.host]:-$sql_server_container}"
     local host="${C[db.host]:-}"
     local port="${C[db.port]:-1433}"
@@ -258,7 +258,7 @@ engine_cli() {
             break
         fi
     done
-    
+
     BEFORE+=("--name=${cli_container}")
     BEFORE+=("--rm")
     BEFORE+=("--network=${network_name}")
@@ -268,7 +268,7 @@ engine_cli() {
         BEFORE+=("--interactive")
         BEFORE+=("--tty")
     fi
-    
+
     AFTER+=("${C[cli_command]}")
     AFTER+=("-S" "${host},${port}")
     AFTER+=("-U" "${user}")
@@ -277,7 +277,7 @@ engine_cli() {
     for arg in "$@"; do
         AFTER+=("$arg")
     done
-    
+
     runner_run "${cli_image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
 }
 

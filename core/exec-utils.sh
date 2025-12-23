@@ -30,7 +30,7 @@ find_executable() {
 require_executable() {
     local name="$1"
     local hint="${2:-}"
-    
+
     if ! find_executable "$name" >/dev/null; then
         log_error "Required executable '$name' not found in PATH"
         if [[ -n "$hint" ]]; then
@@ -38,7 +38,7 @@ require_executable() {
         fi
         exit 1
     fi
-    
+
     find_executable "$name"
 }
 
@@ -53,12 +53,12 @@ require_executable() {
 collect_exec_files() {
     local target="$1"
     local files=()
-    
+
     if [[ ! -e "$target" ]]; then
         log_error "Path does not exist: $target"
         return 1
     fi
-    
+
     if [[ -f "$target" ]]; then
         # Single file
         echo "$target"
@@ -67,12 +67,12 @@ collect_exec_files() {
         while IFS= read -r -d '' file; do
             files+=("$file")
         done < <(find "$target" -type f -name "*.sql" -print0 | sort -z)
-        
+
         if [[ ${#files[@]} -eq 0 ]]; then
             log_warn "No SQL files found in directory: $target"
             return 0
         fi
-        
+
         printf '%s\n' "${files[@]}"
     else
         log_error "Invalid target: $target (not a file or directory)"
@@ -102,12 +102,12 @@ with_tempfile() {
 print_exec_plan() {
     local files=("$@")
     local total=${#files[@]}
-    
+
     if [[ $total -eq 0 ]]; then
         log_info "No files to execute"
         return 0
     fi
-    
+
     log_info "Execution plan ($total files):"
     for i in "${!files[@]}"; do
         printf "[%d/%d] %s\n" $((i+1)) "$total" "$(basename "${files[i]}")"
@@ -141,13 +141,13 @@ run_or_abort() {
 run_each_or_abort() {
     local files=()
     local callback=""
-    
+
     # Parse files until we hit --
     while [[ $# -gt 0 && "$1" != "--" ]]; do
         files+=("$1")
         shift
     done
-    
+
     if [[ "$1" == "--" ]]; then
         shift
         callback="$1"
@@ -155,17 +155,17 @@ run_each_or_abort() {
         log_error "Usage: run_each_or_abort <files...> -- <callback>"
         return 1
     fi
-    
+
     local total=${#files[@]}
     for i in "${!files[@]}"; do
         local file="${files[i]}"
         log_info "[$((i+1))/$total] Processing: $(basename "$file")"
-        
+
         if ! "$callback" "$file"; then
             log_error "Failed to process: $file"
             exit 1
         fi
-        
+
         log_debug "Successfully processed: $file"
     done
 }
@@ -181,13 +181,13 @@ verify_sql_result() {
     local exit_code="$1"
     local output="$2"
     local file="$3"
-    
+
     if [[ $exit_code -ne 0 ]]; then
         log_error "SQL execution failed for: $(basename "$file")"
         log_error "Output: $output"
         return 1
     fi
-    
+
     # Check for common SQL error patterns
     if echo "$output" | grep -qi "error\|failed\|exception"; then
         log_warn "Potential issues detected in output from: $(basename "$file")"
@@ -205,10 +205,10 @@ verify_sql_result() {
 with_transaction() {
     local db_command="$1"
     shift
-    
+
     log_debug "Starting transaction"
     run_or_abort "$db_command" "BEGIN;"
-    
+
     if "$@"; then
         log_debug "Committing transaction"
         run_or_abort "$db_command" "COMMIT;"
@@ -231,10 +231,10 @@ show_progress() {
     local current="$1"
     local total="$2"
     local filename="$3"
-    
+
     local percent=$((current * 100 / total))
     printf "\r[%3d%%] [%d/%d] %s" "$percent" "$current" "$total" "$(basename "$filename")"
-    
+
     if [[ $current -eq $total ]]; then
         echo  # newline at the end
     fi

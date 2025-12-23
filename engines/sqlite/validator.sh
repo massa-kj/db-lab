@@ -60,7 +60,7 @@ _validate_sqlite_journal_mode() {
     [[ "$engine" != "sqlite" ]] && return 0
 
     local journal_mode="${CFG[sqlite.journal_mode]:-}"
-    
+
     if [[ -n "$journal_mode" ]]; then
         case "$journal_mode" in
             DELETE|TRUNCATE|PERSIST|MEMORY|WAL|OFF)
@@ -84,7 +84,7 @@ _validate_sqlite_foreign_keys() {
     [[ "$engine" != "sqlite" ]] && return 0
 
     local foreign_keys="${CFG[sqlite.foreign_keys]:-}"
-    
+
     if [[ -n "$foreign_keys" ]]; then
         case "$foreign_keys" in
             ON|OFF|on|off|1|0)
@@ -108,7 +108,7 @@ _validate_sqlite_timeout() {
     [[ "$engine" != "sqlite" ]] && return 0
 
     local timeout="${CFG[sqlite.timeout]:-}"
-    
+
     if [[ -n "$timeout" ]]; then
         # Check if timeout is a positive integer
         if [[ ! "$timeout" =~ ^[0-9]+$ ]] || [[ "$timeout" -lt 0 ]]; then
@@ -130,7 +130,7 @@ _validate_sqlite_no_network_exposure() {
     [[ "$engine" != "sqlite" ]] && return 0
 
     local expose_enabled="${CFG[runtime.expose.enabled]:-false}"
-    
+
     if [[ "$expose_enabled" == "true" ]]; then
         log_warn "[validator] SQLite doesn't use network ports, ignoring expose settings"
     fi

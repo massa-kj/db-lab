@@ -22,23 +22,23 @@ wait_for_postgres() {
     local container_name="$1"
     local max_attempts="${2:-30}"
     local attempt=1
-    
+
     log_info "Waiting for PostgreSQL to be ready..."
-    
+
     while [[ $attempt -le $max_attempts ]]; do
         log_debug "Health check attempt $attempt/$max_attempts"
-        
+
         # Use pg_isready to check PostgreSQL readiness
         if exec_container "$container_name" pg_isready -q >/dev/null 2>&1; then
             log_info "PostgreSQL is ready!"
             return 0
         fi
-        
+
         log_debug "PostgreSQL not ready yet, waiting..."
         sleep 2
         ((attempt++))
     done
-    
+
     log_error "PostgreSQL failed to become ready within $((max_attempts * 2)) seconds"
     return 1
 }
@@ -46,23 +46,23 @@ wait_for_postgres() {
 # Start PostgreSQL instance
 engine_up() {
     local -n C="$1"
-    
+
     log_info "Starting PostgreSQL instance: $instance"
-    
+
     # Initialize runner first
     init_runner
-    
+
     local engine="${C[engine]}"
     local instance="${C[instance]}"
     local container_name
     container_name=$(get_container_name "$engine" "$instance")
-    
+
     # Check if container is already running
     if container_running "$container_name"; then
         log_info "Container is already running: $container_name"
         return 0
     fi
-    
+
     # Get instance configuration
     local data_dir network_name version image
     data_dir="${C[storage.data_dir]:-${XDG_DATA_HOME:-$HOME/.local/share}/dblab/postgres/${instance}/data}"
@@ -77,24 +77,24 @@ engine_up() {
 
     # Ensure directories exist
     ensure_dir "$data_dir"
-    
+
     # Create network if it doesn't exist
     create_network "$network_name"
-    
+
     # Ensure image is available
     ensure_image "$image"
-    
+
     # Remove existing stopped container if exists
     if container_exists "$container_name" && ! container_running "$container_name"; then
         log_debug "Removing existing stopped container: $container_name"
         remove_container "$container_name"
     fi
-    
+
     log_info "Starting PostgreSQL container: $container_name"
-    
+
     local BEFORE=()
     local AFTER=()
-    
+
     BEFORE+=(--name "${container_name}")
     BEFORE+=(--network "${network_name}")
     BEFORE+=(-d)
@@ -111,7 +111,7 @@ engine_up() {
         expose_ports="${C[runtime.expose.ports]:-}"
 
         if [[ -n "$expose_ports" ]]; then
-            # If port is specified without host port (e.g., "5432"), 
+            # If port is specified without host port (e.g., "5432"),
             # map it to the same host port (e.g., "5432:5432")
             if [[ "$expose_ports" =~ ^[0-9]+$ ]]; then
                 expose_ports="${expose_ports}:${expose_ports}"
@@ -122,27 +122,27 @@ engine_up() {
     fi
 
     runner_run "${image}" --before "${BEFORE[@]}" --after "${AFTER[@]}"
-    
+
     # Wait for PostgreSQL to be ready
     if ! wait_for_postgres "$container_name"; then
         log_error "PostgreSQL startup failed"
-        
+
         # Show logs for debugging
         log_error "Container logs:"
         get_container_logs "$container_name" 50
-        
+
         # Stop and remove failed container
         stop_container "$container_name"
         remove_container "$container_name" true
-        
+
         die "PostgreSQL startup failed"
     fi
-    
+
     # Update instance state
     update_state_up "$engine" "$instance"
-    
+
     log_info "PostgreSQL instance '$instance' started successfully"
-    
+
     # Show connection information
     log_info "Connection details:"
     log_info "  Host: $container_name (in network: $network_name)"

@@ -11,4 +11,3 @@ This repository uses the official Microsoft SQL Server Linux container.
   [Configure SQL Server settings with environment variables on Linux](https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-configure-environment-variables?view=sql-server-ver17)
 - This repository only provides configuration/scripts and does not take responsibility for support or maintenance. Please refer to Microsoft documentation/support.  
   [Configure and customize SQL Server Linux containers](https://learn.microsoft.com/en-us/sql/linux/sql-server-linux-docker-container-configure?view=sql-server-ver17&pivots=cs1-bash)
-

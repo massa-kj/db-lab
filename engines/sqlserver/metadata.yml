@@ -75,7 +75,7 @@ env_vars:
     description: "Whether to expose the database port"
   - name: DBLAB_EPHEMERAL
     map: storage.persistent
-    description: "If true, data is not persisted" 
+    description: "If true, data is not persisted"
   - name: DBLAB_STORAGE_DATA_DIR
     map: storage.data_dir
     description: "Data directory for SQL Server"

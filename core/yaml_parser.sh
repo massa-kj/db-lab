@@ -13,22 +13,22 @@ source "${SCRIPT_DIR}/lib.sh"
 parse_yaml_array() {
     local file="$1"
     local key="$2"
-    
+
     if [[ ! -f "$file" ]]; then
         log_error "File not found: $file"
         return 1
     fi
-    
+
     # Extract array values using awk
     awk -v key="$key" '
     BEGIN { in_array = 0 }
-    
+
     # Start of array
     /^[[:space:]]*'"$key"'[[:space:]]*:/ {
         in_array = 1
         next
     }
-    
+
     # Array items
     in_array && /^[[:space:]]*-[[:space:]]*/ {
         sub(/^[[:space:]]*-[[:space:]]*/, "")
@@ -36,7 +36,7 @@ parse_yaml_array() {
         print $0
         next
     }
-    
+
     # End of array (next top-level key)
     in_array && /^[[:alpha:]]/ {
         in_array = 0
@@ -48,22 +48,22 @@ parse_yaml_array() {
 parse_yaml_section() {
     local file="$1"
     local section="$2"
-    
+
     if [[ ! -f "$file" ]]; then
         log_error "File not found: $file"
         return 1
     fi
-    
+
     # Extract section key-value pairs
     awk -v section="$section" '
     BEGIN { in_section = 0 }
-    
+
     # Start of section
     /^[[:space:]]*'"$section"'[[:space:]]*:/ {
         in_section = 1
         next
     }
-    
+
     # Key-value pairs in section
     in_section && /^[[:space:]]+[[:alpha:]]/ {
         gsub(/^[[:space:]]+/, "")
@@ -71,7 +71,7 @@ parse_yaml_section() {
         print $0
         next
     }
-    
+
     # End of section (next top-level key)
     in_section && /^[[:alpha:]]/ {
         in_section = 0
@@ -163,7 +163,7 @@ yaml_parse_file() {
             local is_in_array=false
             local array_parent_key=""
             local array_index=""
-            
+
             # Look for numeric array index in context stack
             for ((i=0; i<${#context_stack[@]}; i++)); do
                 if [[ "${context_stack[$i]}" =~ ^[0-9]+$ ]]; then
@@ -188,7 +188,7 @@ yaml_parse_file() {
                     YAML_REF["${top_parent}[${array_index}].${key}"]="$value"
                     log_debug "Set YAML_REF[${top_parent}[${array_index}].${key}]=$value"
                 fi
-                
+
                 # Update array index when we encounter the first property
                 local parent_for_index
                 if [[ -n "$array_parent_key" ]]; then
@@ -196,7 +196,7 @@ yaml_parse_file() {
                 else
                     parent_for_index="${context_stack[0]}"
                 fi
-                
+
                 # Only increment index if this is the first property we've seen for this array element
                 if [[ -z "${YAML_INDEX["${parent_for_index}.${array_index}.first"]:-}" ]]; then
                     YAML_INDEX["${parent_for_index}.${array_index}.first"]="true"
@@ -279,7 +279,7 @@ yaml_parse_file() {
 
                 YAML_REF["${parent_key}[${idx}]"]="$value"
                 log_debug "Set YAML_REF[${parent_key}[${idx}]]=$value"
-                
+
                 # Increment index for next array element
                 YAML_INDEX["$parent_key"]=$(( idx + 1 ))
             fi
@@ -290,7 +290,7 @@ yaml_parse_file() {
         # Lines that don't match any of the above are ignored for current use (extend if needed)
         log_debug "Skipped unrecognized line: $text"
     done < "$file"
-    
+
     log_debug "YAML parsing completed. Found ${#YAML_REF[@]} keys"
 }
 
@@ -316,22 +316,22 @@ yaml_has() {
 yaml_key_exists() {
     local -n yaml_ref="$1"
     local key="$2"
-    
+
     # First check exact match
     if [[ -v "yaml_ref[$key]" ]]; then
         return 0
     fi
-    
+
     # Check if any key starts with the given key followed by a dot or bracket
     # This allows "cli" to match "cli.args[2]" and "cli.args" to match "cli.args[2]"
     local search_pattern="${key}[\.\[]"
-    
+
     for existing_key in "${!yaml_ref[@]}"; do
         if [[ "$existing_key" =~ ^${key}[\.\[] ]]; then
             return 0
         fi
     done
-    
+
     return 1
 }
 
@@ -349,10 +349,10 @@ yaml_get_array() {
     local -n source_ref="$1"
     local array_path="$2"
     local -n target_array="$3"
-    
+
     # Clear target array
     target_array=()
-    
+
     local i=0
     while true; do
         local key="${array_path}[$i]"
@@ -363,7 +363,7 @@ yaml_get_array() {
             break
         fi
     done
-    
+
     log_debug "yaml_get_array: Found ${#target_array[@]} items for '$array_path'"
 }
 
@@ -377,20 +377,20 @@ yaml_get_object() {
     local -n source_ref="$1"
     local object_path="$2"
     local -n target_object="$3"
-    
+
     # Clear target object
     target_object=()
-    
+
     local object_prefix="${object_path}."
     local prefix_len=${#object_prefix}
-    
+
     # Iterate through all keys in source_ref
     for key in "${!source_ref[@]}"; do
         # Check if key starts with the object prefix
         if [[ "$key" == "$object_prefix"* ]]; then
             # Remove object prefix to get the new key
             local new_key="${key:$prefix_len}"
-            
+
             # Skip if new_key is empty or contains array brackets (but allow dots for nested structures)
             # This allows nested keys like "db.user.required" while excluding array elements like "list[0]"
             if [[ -n "$new_key" && "$new_key" != *\[* ]]; then
@@ -402,7 +402,7 @@ yaml_get_object() {
             fi
         fi
     done
-    
+
     # Debug output only if log_debug function exists
     if declare -F log_debug >/dev/null 2>&1; then
         log_debug "yaml_get_object: Found ${#target_object[@]} keys for '$object_path'"

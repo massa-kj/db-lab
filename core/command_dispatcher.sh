@@ -19,7 +19,7 @@ source "${SCRIPT_DIR}/config_interpolator.sh"
 source "${SCRIPT_DIR}/validator.sh"
 
 # =============================================================
-# Core dispatcher functions  
+# Core dispatcher functions
 # =============================================================
 dblab_dispatch_command() {
     local command="$1"
@@ -38,7 +38,7 @@ dblab_dispatch_command() {
     done
     shift # remove --
     args=("$@")
-    
+
     log_debug "Dispatching command '$command' for engine '$engine' and instance '$instance'"
 
     # =============================================================
@@ -85,7 +85,7 @@ dblab_dispatch_command() {
     # Ensure engine and instance are set in CLI_RUNTIME
     CLI_RUNTIME[engine]="$engine"
     CLI_RUNTIME[instance]="$instance"
-    
+
     merge_layers FINAL_CONFIG \
         META_DEFAULTS \
         INSTANCE_RUNTIME \
@@ -158,7 +158,7 @@ dblab_dispatch_command() {
             ;;
         destroy)
             log_info "Destroying $engine instance: $instance"
-            
+
             # Check if engine has destroy function
             if declare -F "engine_destroy" >/dev/null; then
                 # Engine has destroy implementation, call it directly
@@ -171,7 +171,7 @@ dblab_dispatch_command() {
             ;;
         status)
             log_info "Checking status of $engine instance: $instance"
-            
+
             if declare -F "engine_status" >/dev/null; then
                 # Engine has status implementation, call it directly
                 local status
@@ -218,7 +218,7 @@ dblab_dispatch_client_command() {
     done
     shift # remove --
     args=("$@")
-    
+
     log_debug "Dispatching command '$command' for engine '$engine' and instance '$instance'"
 
     # =============================================================
@@ -247,7 +247,7 @@ dblab_dispatch_client_command() {
     # Ensure engine and instance are set in CLI_RUNTIME
     CLI_RUNTIME[engine]="$engine"
     CLI_RUNTIME[instance]="$instance"
-    
+
     client_merge_layers FINAL_CONFIG \
         META_DEFAULTS \
         ENV_RUNTIME \

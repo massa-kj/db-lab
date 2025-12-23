@@ -20,7 +20,7 @@ init_runner() {
     if [[ -n "${DBLAB_CONTAINER_RUNTIME:-}" ]]; then
         return 0
     fi
-    
+
     init_container_runtime >/dev/null
 }
 
@@ -68,7 +68,7 @@ add_port() {
 # Add volume mount
 add_volume() {
     local volume_spec="$1"
-    
+
     # Add :Z for SELinux compatibility if needed
     local runtime="${DBLAB_CONTAINER_RUNTIME:-podman}"
     if [[ "$runtime" == "podman" && "$(get_runtime_capability rootless)" == "true" ]]; then
@@ -77,7 +77,7 @@ add_volume() {
             volume_spec="${volume_spec}:Z"
         fi
     fi
-    
+
     add_run_arg "-v" "$volume_spec"
 }
 
@@ -112,18 +112,18 @@ exec_container() {
     local container="$1"
     shift
     local exec_cmd=("$@")
-    
+
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     local cmd=("$runtime" "exec" "${EXEC_ARGS[@]}" "$container" "${exec_cmd[@]}")
-    
+
     # Execute the command
     "${cmd[@]}"
 }
@@ -132,12 +132,12 @@ exec_container() {
 stop_container() {
     local container="$1"
     local timeout="${2:-10}"
-    
+
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if container_exists "$container"; then
         "$runtime" stop -t "$timeout" "$container" || {
             log_warn "Failed to stop container gracefully, forcing stop"
@@ -150,18 +150,18 @@ stop_container() {
 remove_container() {
     local container="$1"
     local force="${2:-false}"
-    
+
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if container_exists "$container"; then
         local args=()
         if [[ "$force" == "true" ]]; then
             args+=("-f")
         fi
-        
+
         "$runtime" rm "${args[@]}" "$container" || {
             log_warn "Failed to remove container: $container"
             return 1
@@ -176,7 +176,7 @@ container_exists() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     "$runtime" ps -a --format "{{.Names}}" | grep -q "^${container}$"
 }
 
@@ -184,11 +184,11 @@ container_exists() {
 container_running() {
     local container="$1"
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
-    
+
     if [[ -z "$runtime" ]]; then
         return 1
     fi
-    
+
     "$runtime" ps --format "{{.Names}}" | grep -q "^${container}$"
 }
 
@@ -199,15 +199,15 @@ get_container_status() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if ! container_exists "$container"; then
         echo "not-found"
         return 0
     fi
-    
+
     local status
     status=$("$runtime" ps -a --filter "name=^${container}$" --format "{{.Status}}" | head -1)
-    
+
     case "$status" in
         *"Up "*) echo "running" ;;
         *"Exited "*) echo "stopped" ;;
@@ -221,21 +221,21 @@ get_container_logs() {
     local container="$1"
     local tail="${2:-100}"
     local follow="${3:-false}"
-    
+
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
     local args=()
-    
+
     if [[ "$tail" != "all" ]]; then
         args+=("--tail" "$tail")
     fi
-    
+
     if [[ "$follow" == "true" ]]; then
         args+=("-f")
     fi
-    
+
     "$runtime" logs "${args[@]}" "$container"
 }
 
@@ -243,16 +243,16 @@ get_container_logs() {
 create_network() {
     local network_name="$1"
     local driver="${2:-bridge}"
-    
+
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if network_exists "$network_name"; then
         return 0
     fi
-    
+
     "$runtime" network create --driver "$driver" "$network_name" || {
         die "Failed to create network: $network_name"
     }
@@ -262,21 +262,21 @@ create_network() {
 remove_network() {
     local network_name="$1"
     local force="${2:-false}"
-    
+
     local runtime="${DBLAB_CONTAINER_RUNTIME:-}"
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if ! network_exists "$network_name"; then
         return 0
     fi
-    
+
     local args=()
     if [[ "$force" == "true" ]]; then
         args+=("-f")
     fi
-    
+
     "$runtime" network rm "${args[@]}" "$network_name" || {
         log_warn "Failed to remove network: $network_name"
         return 1
@@ -290,7 +290,7 @@ network_exists() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     "$runtime" network ls --format "{{.Name}}" | grep -q "^${network_name}$"
 }
 
@@ -300,7 +300,7 @@ list_networks() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     "$runtime" network ls --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}"
 }
 
@@ -311,12 +311,12 @@ list_containers() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     local args=()
     if [[ "$all" == "true" ]]; then
         args+=("-a")
     fi
-    
+
     "$runtime" ps "${args[@]}" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 }
 
@@ -327,16 +327,16 @@ ensure_image() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if "$runtime" image exists "$image" >/dev/null 2>&1; then
         return 0
     fi
-    
+
     log_info "Pulling image: $image"
     "$runtime" pull "$image" || {
         die "Failed to pull image: $image"
     }
-    
+
     log_info "Image pulled successfully: $image"
 }
 
@@ -347,16 +347,16 @@ container_health_check() {
     if [[ -z "$runtime" ]]; then
         die "Container runtime not initialized. Call init_runner first."
     fi
-    
+
     if ! container_running "$container"; then
         echo "container-not-running"
         return 1
     fi
-    
+
     # Check if health check is defined
     local health_status
     health_status=$("$runtime" inspect "$container" --format "{{.State.Health.Status}}" 2>/dev/null || echo "none")
-    
+
     case "$health_status" in
         "healthy") echo "healthy" ;;
         "unhealthy") echo "unhealthy" ;;

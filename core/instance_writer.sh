@@ -89,7 +89,7 @@ instance_writer_create_initial() {
     # Get engine and instance from CFG
     local engine="${cfg[engine]:-}"
     local instance="${cfg[instance]:-}"
-    
+
     # Validate required fields
     if [[ -z "$engine" ]]; then
         echo "[instance_writer] ERROR: engine not specified in CFG" >&2
@@ -102,7 +102,7 @@ instance_writer_create_initial() {
 
     local file
     file="$(_instance_file "$engine" "$instance")"
-    
+
     # Idempotency check: if file already exists, do nothing
     if [[ -f "$file" ]]; then
         return 0

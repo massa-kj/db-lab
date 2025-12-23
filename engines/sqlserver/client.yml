@@ -44,4 +44,4 @@ env_vars:
     description: "Whether to expose the database port"
   - name: DBLAB_EPHEMERAL
     map: storage.persistent
-    description: "If true, data is not persisted" 
+    description: "If true, data is not persisted"

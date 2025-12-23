@@ -71,7 +71,7 @@ metadata_load() {
     # Load env_vars array (for env-template generation)
     # ---------------------------------------------------------
     declare -gA META_ENV_VARS=()
-    
+
     # Extract all env_vars[*] keys directly from OUT_META
     for key in "${!OUT_META[@]}"; do
         if [[ "$key" == env_vars\[*\]* ]]; then
@@ -107,7 +107,7 @@ metadata_load() {
     yaml_get_array OUT_META "supported" META_SUPPORTED_VERSIONS || true
 
     # ---------------------------------------------------------
-    # 
+    #
     # ---------------------------------------------------------
     # Validation for cli.args array
     if yaml_key_exists OUT_META "cli"; then
@@ -187,7 +187,7 @@ client_metadata_load() {
     # Load env_vars array (for env-template generation)
     # ---------------------------------------------------------
     declare -gA META_ENV_VARS=()
-    
+
     # Extract all env_vars[*] keys directly from OUT_META
     for key in "${!OUT_META[@]}"; do
         if [[ "$key" == env_vars\[*\]* ]]; then
