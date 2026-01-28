@@ -73,6 +73,9 @@ env_vars:
   - name: DBLAB_EXPOSE_ENABLED
     map: runtime.expose.enabled
     description: "Whether to expose the database port"
+  - name: DBLAB_EXPOSE_PORTS
+    map: runtime.expose.ports
+    description: "Ports to expose for the SQL Server container (ex: 127.0.0.1:1433:1433)"
   - name: DBLAB_EPHEMERAL
     map: storage.persistent
     description: "If true, data is not persisted"
